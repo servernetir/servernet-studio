@@ -29,6 +29,12 @@ The complete Python suite passes **90 tests** locally and in hosted CI run 44100
 
 ## Production acceptance not established
 
+### Native Mac coverage correction
+
+The previous startup script always selected `release/mac-arm64`, so it could not establish Intel startup. The revised workflow tests each already-built Mac ZIP on its matching standard native host, rejects host/package architecture mismatches and verifies the executable architecture before launch. It retains one combined Mac packaging job and its update metadata. Local validation for this change: 10 Node tests passed, startup scripts passed syntax checks, workflow YAML parsed and `git diff --check` passed. Native GitHub results for this change are pending; neither Mac launch nor interactive acceptance is claimed. Rollback is to revert this workflow/helper change; it does not alter production, billing, signatures or public flags.
+
+Base Studio SHA: `5759c7efba886ede6351c0ad4fd1aa4eee80b27d`. Core develop remains `311acf8cfecfd0e06cfb02aa0c3eba9134dcfc70`. On 2026-11-17 the previously queued Mac job 134099906786 in run 44100679659 was observed cancelled without steps. The connected Browser tool was unavailable in this execution environment and the fallback browser had no tabs; no cPanel terminal output or deployment is claimed.
+
 Read-only cPanel inspection found Python 3.12.16, Node and Passenger, without Docker/uv. Studio DNS resolved through Cloudflare. Studio SSO files were not installed. The authenticated browser subsequently timed out. On reconnection cPanel required login after an IP change; authenticated Tools and Terminal pages were later observed. A new read-only preflight submission timed out and its output was not observed. No production file, environment value, migration, account record or wallet transaction was changed. No paid model request was issued.
 
 Live login/registration/2FA, actual font/layout rendering, real proxy streaming/disconnects, interactive native install/logout, signing/notarization and ledger reconciliation remain pending. Public installers and update feeds must stay unpublished until acceptance and its matching record are complete. The website gate rejects unapproved, unsigned, missing or malformed release manifests.
