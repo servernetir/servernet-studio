@@ -49,12 +49,10 @@ The website page is `/studio/download` with fa/en/tr variants. Its feature stays
 
 ## Current deployment status
 
-The cPanel session is authenticated. Read-only inspection found Python 3.12.16, Node and Passenger, with Docker absent; Studio DNS resolves through Cloudflare. The application and SSO migrations/configuration have not been installed. Existing `compose.yaml` targets a Docker host; Passenger would need a separately validated ASGI deployment path. No production wallet or customer record was changed. GitHub access was restored by the owner and source is published in develop. The browser connection subsequently timed out before production installation.
+Read-only inspection found Python 3.12.16, Node and Passenger, with Docker absent; Studio DNS resolves through Cloudflare. The private Passenger entry point and JSON runtime configuration are prepared and tested locally; see [CPANEL.md](../CPANEL.md). The application and core SSO migration/configuration have not been installed. No production wallet or customer record was changed. cPanel now requires login again after an IP change.
+
+Source is published in develop and core PR323 is merged. Windows x64 NSIS packaging and an eight-second native startup check passed in GitHub CI; the TEST installer is unsigned. The Mac runner uses macos-15 after macos-14 retirement, but queued/cancelled jobs have not established native Mac acceptance. No signed/notarized public packages or update feed have been released. Full evidence is in [VALIDATION.md](../VALIDATION.md).
 
 Rollback: keep the core download feature off, revert the application source/image, and retain the encrypted BFF database with its matching encryption key. Revoke Studio keys if necessary; do not erase financial history.
 
 Primary references: [Electron security](https://www.electronjs.org/docs/latest/tutorial/security), [Electron platform changes](https://www.electronjs.org/docs/latest/breaking-changes), [electron-builder signing](https://www.electron.build/v26/docs/code-signing/), [cPanel Application Manager](https://docs.cpanel.net/cpanel/software/application-manager/). Installed electron-builder schema 26.18.0 is used by the checked-in configuration.
-
-Update: the owner completed GitHub installation confirmation and granted repository access later in this session. Creating the new develop branch from the tested baseline succeeded. Source publication and native CI are proceeding; earlier 403 observations above describe the earlier state. The cPanel session is authenticated. No production installation or paid request has been performed.
-
-Native Windows build/update: NSIS packaging and an 8-second native startup check passed in GitHub run 44066450575. Its test installer remains unsigned and is not a public release. GitHub access is restored; the Mac runner was updated from retired macos-14 to macos-15. The Passenger deployment adapter is now prepared and tested in memory; see ../CPANEL.md. The browser connection subsequently timed out, so deployment is pending reconnection.

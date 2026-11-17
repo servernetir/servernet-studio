@@ -30,20 +30,18 @@
 
 ## آزمون‌های انجام‌شده
 
-`python -m pytest -c servernet/pytest.ini servernet/tests -q`: ۵۵ آزمون موفق در زمان آماده‌سازی. همهٔ تماس‌های خارجی fake هستند.
+`python -m pytest -c servernet/pytest.ini servernet/tests -q`: ۹۰ آزمون موفق پس از تکمیل تنظیمات خصوصی Passenger. همهٔ تماس‌های خارجی fake هستند.
 `npm ci --ignore-scripts` و `npm run build` در `servernet/web`: موفق؛ TypeScript و Vite.
 آزمون مرورگر Chromium محلی به دلیل محدودیت ایجاد socket محیط اجرا نشد؛ مشاهدهٔ واقعی موبایل، دسترس‌پذیری و بارگیری فونت باید در پذیرش UI انجام شود. build جای این پذیرش را نمی‌گیرد.
 کد PHP با parser دستور زبان بررسی شد؛ این محیط PHP ندارد و نتیجهٔ Laravel باید از CI/محیط آزمایشی تأیید شود.
 نصب تولید، تنظیم DNS و درخواست پولی انجام نشده‌اند.
 
-سمت Laravel در [PR323](https://github.com/servernetir/server/pull/323) ثبت شده است. روی SHA `07399493da48da2670b5959a770507cce79db93f`،۲۱تست/۱۶۵بررسی SSO و Gateway و هر۱۴گردش مرتبط GitHub موفق شدند. این تأیید CI است، نه نصب تولید. ثبت کد مشتری در مخزن جدید هنوز با خطای403 اتصال متوقف است.
+سمت Laravel در [PR323](https://github.com/servernetir/server/pull/323) ادغام شده است؛ آخرین CI هسته ۷۸ آزمون/۱۰۱۲ بررسی را گذراند. کد مشتری در شاخه develop مخزن جدید منتشر شده است. نتایج CI، نسخه‌های متناظر و حدود پذیرش در [گزارش اعتبارسنجی](VALIDATION.md) ثبت شده‌اند. نصب تولید و آزمون مالی واقعی هنوز انجام نشده‌اند.
 
-تکمیل گوگل: CI روی `2382ddcedbeab4ef89f40f6daff0d8de836a7a9e` در run `44057595824`،۷۵تست/۹۸۵بررسی ورود، ثبت‌نام، SSO و Gateway را موفق گذراند؛ هنوز نصب زنده و آزمون واقعی گوگل انجام نشده‌اند.
+برای سی‌پنل مشاهده‌شده که Docker ندارد، از [راهنمای Passenger](CPANEL.md) و `config.example.json` استفاده شود. فایل خصوصی `runtime/config.json` جایگزین تنظیمات محیطی در Passenger است؛ کلیدهای واقعی فقط در سرور و خارج از webroot قرار می‌گیرند. راهنمای Docker بالا فقط برای میزبان دارای Docker است.
 
 ## کلاینت نصبی مستقل
 
 [راهنمای Desktop](desktop/README.md) تنظیمات و شواهد نسخهٔ0.2.0 را شرح می‌دهد. ZIPهای آزمایشی سه معماری ساخته شده‌اند؛ نسخهٔ TEST برای انتشار عمومی نیست. فایل Desktop upstream همچنان دست‌نخورده است و نباید آن را به جای کلاینت `servernet/desktop` توزیع کرد.
 
-Update: the owner completed GitHub installation confirmation and granted repository access later in this session. Creating the new develop branch from the tested baseline succeeded. Source publication and native CI are proceeding; earlier 403 observations above describe the earlier state. The cPanel session is authenticated. No production installation or paid request has been performed.
-
-کد مشتری اکنون در develop مخزن جدید منتشر شده و NSIS و اجرای اولیه روی Windows CI موفق‌اند. adapter مخصوص Passenger در [راهنمای cPanel](CPANEL.md) آماده و با HTTP/SSE ساختگی آزموده شده؛ نصب تولید و ورود/مالی واقعی هنوز انجام نشده‌اند.
+کد مشتری در develop منتشر شده و NSIS و اجرای اولیه روی Windows CI موفق‌اند. adapter مخصوص Passenger و تنظیمات خصوصی آن آماده و با HTTP/SSE ساختگی آزموده شده‌اند. نشست سی‌پنل پس از تغییر IP ورود دوباره می‌خواهد؛ نصب تولید و ورود/مالی واقعی هنوز انجام نشده‌اند.

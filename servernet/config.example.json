@@ -1,0 +1,8 @@
+{
+  "SERVERNET_STUDIO_ORIGIN": "https://studio.servernet.cloud",
+  "SERVERNET_STUDIO_CLIENT_SECRET": "REPLACE_WITH_THE_PRIVATE_CORE_STUDIO_CLIENT_SECRET",
+  "SERVERNET_STUDIO_ENCRYPTION_KEY": "REPLACE_WITH_A_PERSISTENT_FERNET_KEY",
+  "SERVERNET_STUDIO_DB": "/home/servernetcloud/servernet-studio-state/studio.db",
+  "SERVERNET_STUDIO_SOURCE_URL": "https://github.com/servernetir/servernet-studio/tree/REPLACE_WITH_DEPLOYED_COMMIT_SHA",
+  "SERVERNET_STUDIO_FONTS": "/home/servernetcloud/public_html/assets/font/woff2"
+}

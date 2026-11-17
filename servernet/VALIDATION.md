@@ -14,6 +14,10 @@ Studio code is published in servernetir/servernet-studio:develop. Core SSO/walle
 - Customer lockfile install and TypeScript/Vite build passed locally and in CI. Font URLs resolve at runtime from existing ServerNet IRANSans files. Actual glyph rendering, mobile layout and accessibility remain unverified.
 - Core functional SHA 1cf62aa100e6ba0af61ae069741ea5e28c109503: CI run 44062680272, job 133968326218, PHP 8.4.27: **78 tests / 1012 assertions passed** across StudioSsoTest, GoogleAuthTest, StudioDownloadsTest and V1ChatTest. Later core commits changed documentation only; base develop remained b76ba2eb03b903508080261e65131c37d92502c8 before merge.
 
+## Passenger runtime configuration update
+
+The complete local Python suite now passes **90 tests**. This adds private JSON configuration loading for Passenger with bounded reads, owner/mode checks, no symlinks/hard links, duplicate/unknown-field rejection, environment precedence and safe failures when a file disappears or is replaced during startup. An integration check starts the customer service with fixture fonts and private config, verifies health/auth/font routes and confirms no secret is exported to the environment. All traffic remains synthetic. Environment-only Docker deployment remains supported. See CPANEL.md for the template and precedence.
+
 ## Packaged artifacts
 
 - Windows x64 NSIS packaging and eight-second native startup passed in runs 44066450575 and 44067697227, and the Windows job of run 44068751154. This establishes native process startup, not interactive install/sign-in or real billing.
@@ -24,7 +28,7 @@ Studio code is published in servernetir/servernet-studio:develop. Core SSO/walle
 
 ## Production acceptance not established
 
-Read-only cPanel inspection found Python 3.12.16, Node and Passenger, without Docker/uv. Studio DNS resolved through Cloudflare. Studio SSO files were not installed. The authenticated browser subsequently timed out, including a runtime reconnection attempt. No production file, environment value, migration, account record or wallet transaction was changed. No paid model request was issued.
+Read-only cPanel inspection found Python 3.12.16, Node and Passenger, without Docker/uv. Studio DNS resolved through Cloudflare. Studio SSO files were not installed. The authenticated browser subsequently timed out. On reconnection, cPanel reported that the IP address had changed and required login again. No production file, environment value, migration, account record or wallet transaction was changed. No paid model request was issued.
 
 Live login/registration/2FA, actual font/layout rendering, real proxy streaming/disconnects, interactive native install/logout, signing/notarization and ledger reconciliation remain pending. Public installers and update feeds must stay unpublished until acceptance and its matching record are complete. The website gate rejects unapproved, unsigned, missing or malformed release manifests.
 

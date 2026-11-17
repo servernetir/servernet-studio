@@ -27,6 +27,8 @@ from fastapi.responses import FileResponse, HTMLResponse, JSONResponse, Redirect
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
 
+from servernet.hosted.config import runtime_environment
+
 # Registration includes the console's existing verification steps. This is only
 # a browser-bound PKCE transaction lifetime, not an authorization code lifetime.
 LOGIN_FLOW_TTL = 3600
@@ -457,11 +459,12 @@ def create_app(settings: Settings, upstream: httpx.AsyncClient | None = None):
 
 
 def configured_app():
-    font_dir = Path(os.environ.get('SERVERNET_STUDIO_FONTS', '/run/servernet/fonts'))
+    environment = runtime_environment()
+    font_dir = Path(environment.get('SERVERNET_STUDIO_FONTS', '/run/servernet/fonts'))
     if not all((font_dir / name).is_file() for name in ('IRANSans-web.woff2', 'IRANSans-Medium-web.woff2', 'IRANSans-Bold-web.woff2')):
         raise ValueError('Install the ServerNet IRANSans font files before starting the customer app.')
     return create_app(Settings(
-        origin=os.environ['SERVERNET_STUDIO_ORIGIN'], client_secret=os.environ['SERVERNET_STUDIO_CLIENT_SECRET'],
-        encryption_key=os.environ['SERVERNET_STUDIO_ENCRYPTION_KEY'], database=Path(os.environ.get('SERVERNET_STUDIO_DB', '/data/studio.db')),
-        source_url=os.environ['SERVERNET_STUDIO_SOURCE_URL'], fonts=Path(os.environ.get('SERVERNET_STUDIO_FONTS', '/run/servernet/fonts')),
+        origin=environment['SERVERNET_STUDIO_ORIGIN'], client_secret=environment['SERVERNET_STUDIO_CLIENT_SECRET'],
+        encryption_key=environment['SERVERNET_STUDIO_ENCRYPTION_KEY'], database=Path(environment.get('SERVERNET_STUDIO_DB', '/data/studio.db')),
+        source_url=environment['SERVERNET_STUDIO_SOURCE_URL'], fonts=font_dir,
     ))
