@@ -41,6 +41,12 @@ Live login/registration/2FA, actual font/layout rendering, real proxy streaming/
 
 ## Recovery and provenance
 
+### Mac runner capacity — 2026-11-17
+
+Run [44106078048](https://github.com/servernetir/servernet-studio/actions/runs/44106078048), source `a0fe9c6d0cbee7bfd09c853a102fdaf5bf59e6a7`, passed contracts/build and Windows packaging/startup. Its Mac package job 134119056548 never acquired a hosted runner; the public run summary explicitly reports arm64 capacity constraints and an internal GitHub error. Both downstream Mac launch checks were consequently skipped. This is not a package execution failure or evidence of Mac acceptance.
+
+The package assembly job now uses the supported standard `macos-15-intel` host while retaining both arm64/x64 targets and separate native launch jobs. The actual Apple Silicon check is not substituted by Intel execution. Base remote source/tree: `a0fe9c6d0cbee7bfd09c853a102fdaf5bf59e6a7` / `daadf71723b67a1c02fdb44c4ebfc80e579cadf3`. Only the workflow host selection and these explanatory documents change; no production settings, public release gates or signing requirements change. Rollback is to restore the package assembly runner label. New native results are pending.
+
 Source baselines: engine b52c45162d4dd91c8379c19a8e836f3e8b8d7e2c, core b76ba2eb03b903508080261e65131c37d92502c8. Original licenses/copyright remain preserved. Customer changes are AGPL-3.0-only; corresponding source must identify the deployed commit.
 
 For rollback, keep core Studio/download flags off, revert app source/image, and revoke Studio keys if needed. Retain the BFF database with its encryption key and preserve financial history. Git publication, installation and production acceptance are distinct outcomes.
