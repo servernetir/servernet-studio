@@ -38,7 +38,7 @@ jobs:
       matrix:
         include:
           - {os: windows-2022, target: '--win --x64', name: windows-x64}
-          - {os: macos-14, target: '--mac --arm64 --x64', name: macos}
+          - {os: macos-15, target: '--mac --arm64 --x64', name: macos}
     runs-on: ${{ matrix.os }}
     timeout-minutes: 30
     env:
