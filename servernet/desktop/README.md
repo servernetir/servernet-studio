@@ -10,7 +10,7 @@ This is the independent ServerNet customer client. It connects to the hosted Stu
 | macOS Intel x64 | Unsigned validation app ZIP | Signed/notarized DMG and update ZIP |
 | macOS Apple Silicon arm64 | Unsigned validation app ZIP | Signed/notarized DMG and update ZIP |
 
-Mac requires macOS 13 or later. Windows requires Windows 10 or later, x64. An internet connection and the installed/activated hosted service are required. These validation packages are not public releases and were not installed/executed on the target operating systems. Do not instruct customers to bypass their operating system's security warnings.
+Mac requires macOS 13 or later. Windows requires Windows 10 or later, x64. An internet connection and the installed/activated hosted service are required. Automated eight-second native startup passed for Windows x64 and Mac Intel/Apple Silicon in run 44126181641. Interactive installation, login/logout and financial acceptance remain incomplete. These validation packages are not public releases. Do not instruct customers to bypass their operating system's security warnings.
 
 ## Identity and billing
 
@@ -55,7 +55,7 @@ The website page is `/studio/download` with fa/en/tr variants. Its feature stays
 
 Read-only inspection found Python 3.12.16, Node and Passenger, with Docker absent; Studio DNS resolves through Cloudflare. The private Passenger entry point and JSON runtime configuration passed 90 tests and a web build locally/in CI; see [CPANEL.md](../CPANEL.md). The application and core SSO migration/configuration have not been installed. No production wallet or customer record was changed. cPanel required login after an IP change and authenticated Tools/Terminal pages were later observed, but the read-only preflight submission timed out before its output could be verified.
 
-Source is published in develop and core PR323 is merged. Windows x64 NSIS packaging and an eight-second native startup check passed in GitHub CI; the TEST installer is unsigned. The Mac runner uses macos-15 after macos-14 retirement, but queued/cancelled jobs have not established native Mac acceptance. No signed/notarized public packages or update feed have been released. Full evidence is in [VALIDATION.md](../VALIDATION.md).
+Source is published in develop and core PR323 is merged. On source b6ae19b0c1edcfa93bbde8b45f7c792db3598c7a, run 44126181641 passed Windows NSIS packaging/startup, Mac packaging and separate eight-second launches on Intel and Apple Silicon hosts. The Mac hosts downloaded the same run's archive, checked ZIP integrity and the executable architecture before launching. These TEST packages have no distribution signatures/notarization; interactive native acceptance is still pending. No signed/notarized public packages or update feed have been released. Full evidence is in [VALIDATION.md](../VALIDATION.md).
 
 Rollback: keep the core download feature off, revert the application source/image, and retain the encrypted BFF database with its matching encryption key. Revoke Studio keys if necessary; do not erase financial history.
 

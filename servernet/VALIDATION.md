@@ -20,6 +20,21 @@ The complete Python suite passes **90 tests** locally and in hosted CI run 44100
 
 ## Packaged artifacts
 
+### Latest verified native run — 2026-11-17
+
+Source `b6ae19b0c1edcfa93bbde8b45f7c792db3598c7a`, run [44126181641](https://github.com/servernetir/servernet-studio/actions/runs/44126181641): all five jobs completed successfully. Contracts job 134190473516 logged **90 Python tests passed, 10 Node tests passed, zero Node failures**, and a successful TypeScript/Vite build. Windows job 134190946173 built the NSIS TEST installer and passed startup. Intel packaging job 134190946108 produced both Mac ZIPs. Native jobs 134198492905 (Intel) and 134198492787 (Apple Silicon) downloaded that run's artifact, checked ZIP integrity and matching Mach-O architecture, then each logged that the packaged process stayed running for eight seconds.
+
+GitHub artifact metadata (expected digests, not an independent local download/hash claim):
+
+| Artifact | ID | Bytes | SHA-256 |
+| --- | --- | --- | --- |
+| servernet-macos-UNSIGNED-TEST | 14349305941 | 241236240 | dd25bd052eb26196afc31d40f3434f0c710415cc9c1771ff92527f9eb4bd5b21 |
+| servernet-windows-x64-UNSIGNED-TEST | 14348135946 | 121895435 | 79f9ed0e5e660c4b175d0f0128a96d0bf8b15922d2505f466a7fc61d42243686 |
+
+Both artifacts expire on 2026-12-01. This closes the previously unconfirmed native process-startup check for both Mac architectures. It does **not** establish interactive installation, sign-in/registration/logout, real billing, distribution signing, notarization, update acceptance or production readiness. No acceptance booleans or release flags were changed. Historical queued/cancelled observations below remain historical.
+
+Remaining prerequisites require authorized production access, an explicitly authorized test account/spending cap, and existing Windows/Apple signing/notarization configuration through private Actions secrets. The connected Browser tool again returned unavailable in this environment; no live server output or installation is claimed. No credentials were inspected and no paid model request was made. Resume from the source above and recheck remote HEAD and concurrent deployment state before installation.
+
 - Windows x64 NSIS packaging and eight-second native startup passed in runs 44066450575 and 44067697227, and the Windows job of run 44068751154. This establishes native process startup, not interactive install/sign-in or real billing.
 - On source ed1479b9fee5cd79b5d1236d7918fbaf8d4ea93c, desktop contracts and the Windows native package/startup job 134099906669 in run 44100679659 also passed. The Mac job was still queued at the last check; no new native Mac result is claimed.
 - Artifact 14319948055 was downloaded; ZIP CRC passed and SHA-256 matched GitHub digest 891e7d6308ee0f943e832496a9feccd2aa0682ca6746e0bd6aa1e5db218f41c5. It contains the unsigned TEST installer and blockmap.
