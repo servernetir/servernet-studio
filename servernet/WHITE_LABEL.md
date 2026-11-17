@@ -30,7 +30,7 @@
 
 ## آزمون‌های انجام‌شده
 
-`python -m pytest -c servernet/pytest.ini servernet/tests -q`: ۵۲ آزمون موفق در زمان آماده‌سازی. همهٔ تماس‌های خارجی fake هستند.
+`python -m pytest -c servernet/pytest.ini servernet/tests -q`: ۵۵ آزمون موفق در زمان آماده‌سازی. همهٔ تماس‌های خارجی fake هستند.
 `npm ci --ignore-scripts` و `npm run build` در `servernet/web`: موفق؛ TypeScript و Vite.
 آزمون مرورگر Chromium محلی به دلیل محدودیت ایجاد socket محیط اجرا نشد؛ مشاهدهٔ واقعی موبایل، دسترس‌پذیری و بارگیری فونت باید در پذیرش UI انجام شود. build جای این پذیرش را نمی‌گیرد.
 کد PHP با parser دستور زبان بررسی شد؛ این محیط PHP ندارد و نتیجهٔ Laravel باید از CI/محیط آزمایشی تأیید شود.
@@ -45,3 +45,5 @@
 [راهنمای Desktop](desktop/README.md) تنظیمات و شواهد نسخهٔ0.2.0 را شرح می‌دهد. ZIPهای آزمایشی سه معماری ساخته شده‌اند؛ نسخهٔ TEST برای انتشار عمومی نیست. فایل Desktop upstream همچنان دست‌نخورده است و نباید آن را به جای کلاینت `servernet/desktop` توزیع کرد.
 
 Update: the owner completed GitHub installation confirmation and granted repository access later in this session. Creating the new develop branch from the tested baseline succeeded. Source publication and native CI are proceeding; earlier 403 observations above describe the earlier state. The cPanel session is authenticated. No production installation or paid request has been performed.
+
+کد مشتری اکنون در develop مخزن جدید منتشر شده و NSIS و اجرای اولیه روی Windows CI موفق‌اند. adapter مخصوص Passenger در [راهنمای cPanel](CPANEL.md) آماده و با HTTP/SSE ساختگی آزموده شده؛ نصب تولید و ورود/مالی واقعی هنوز انجام نشده‌اند.

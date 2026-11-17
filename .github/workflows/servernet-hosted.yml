@@ -1,0 +1,24 @@
+name: ServerNet hosted service
+on:
+  push:
+    branches: [develop]
+    paths: ['servernet/hosted/**', 'servernet/tests/**', 'servernet/web/**', 'servernet/passenger_wsgi.py', 'servernet/requirements-test.txt', 'servernet/pytest.ini', '.github/workflows/servernet-hosted.yml']
+  pull_request:
+    paths: ['servernet/hosted/**', 'servernet/tests/**', 'servernet/web/**', 'servernet/passenger_wsgi.py', 'servernet/requirements-test.txt', 'servernet/pytest.ini', '.github/workflows/servernet-hosted.yml']
+permissions:
+  contents: read
+jobs:
+  contracts:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803
+        with: {persist-credentials: false}
+      - uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0
+        with: {python-version: '3.12'}
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1
+        with: {node-version: '24'}
+      - run: python -m pip install -r servernet/requirements-test.txt
+      - run: python -m pytest -c servernet/pytest.ini servernet/tests -q
+      - run: npm ci --ignore-scripts --no-audit --no-fund && npm run build
+        working-directory: servernet/web

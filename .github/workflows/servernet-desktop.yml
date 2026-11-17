@@ -2,9 +2,9 @@ name: ServerNet desktop packages
 on:
   push:
     branches: [develop]
-    paths: ['servernet/**', '.github/workflows/servernet-desktop.yml']
+    paths: ['servernet/desktop/**', '.github/workflows/servernet-desktop.yml']
   pull_request:
-    paths: ['servernet/**', '.github/workflows/servernet-desktop.yml']
+    paths: ['servernet/desktop/**', '.github/workflows/servernet-desktop.yml']
   workflow_dispatch:
     inputs:
       signed:
