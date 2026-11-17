@@ -49,7 +49,7 @@ The website page is `/studio/download` with fa/en/tr variants. Its feature stays
 
 ## Current deployment status
 
-Read-only inspection found Python 3.12.16, Node and Passenger, with Docker absent; Studio DNS resolves through Cloudflare. The private Passenger entry point and JSON runtime configuration are prepared and tested locally; see [CPANEL.md](../CPANEL.md). The application and core SSO migration/configuration have not been installed. No production wallet or customer record was changed. cPanel now requires login again after an IP change.
+Read-only inspection found Python 3.12.16, Node and Passenger, with Docker absent; Studio DNS resolves through Cloudflare. The private Passenger entry point and JSON runtime configuration passed 90 tests and a web build locally/in CI; see [CPANEL.md](../CPANEL.md). The application and core SSO migration/configuration have not been installed. No production wallet or customer record was changed. cPanel required login after an IP change and authenticated Tools/Terminal pages were later observed, but the read-only preflight submission timed out before its output could be verified.
 
 Source is published in develop and core PR323 is merged. Windows x64 NSIS packaging and an eight-second native startup check passed in GitHub CI; the TEST installer is unsigned. The Mac runner uses macos-15 after macos-14 retirement, but queued/cancelled jobs have not established native Mac acceptance. No signed/notarized public packages or update feed have been released. Full evidence is in [VALIDATION.md](../VALIDATION.md).
 

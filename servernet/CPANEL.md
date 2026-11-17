@@ -22,6 +22,6 @@ Set `SERVERNET_STUDIO_FONTS` to the existing site's three IRANSans WOFF2 files, 
 
 ## Live status
 
-The current task has performed read-only server preflight. It has not registered this application, changed production environment values, run migrations or made a paid model request. The browser reconnected on 2026-11-17, but cPanel reported that the IP address had changed and required a new login. Native code signing/notarization credentials also have not been configured for a public release.
+The current task has performed read-only server preflight. It has not registered this application, changed production environment values, run migrations or made a paid model request. On 2026-11-17 cPanel first required login after an IP change, then authenticated Tools and Terminal pages were observed again. A new read-only preflight submission timed out in the browser connection; its output was not observed and is not accepted as completed. Native code signing/notarization credentials have not been configured for a public release.
 
 Sources: [cPanel Application Manager](https://docs.cpanel.net/cpanel/software/application-manager/), [Python WSGI on cPanel](https://docs.cpanel.net/knowledge-base/web-services/how-to-install-a-python-wsgi-application/), [a2wsgi](https://github.com/abersheeran/a2wsgi).

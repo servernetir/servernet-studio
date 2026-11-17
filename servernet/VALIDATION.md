@@ -16,11 +16,12 @@ Studio code is published in servernetir/servernet-studio:develop. Core SSO/walle
 
 ## Passenger runtime configuration update
 
-The complete local Python suite now passes **90 tests**. This adds private JSON configuration loading for Passenger with bounded reads, owner/mode checks, no symlinks/hard links, duplicate/unknown-field rejection, environment precedence and safe failures when a file disappears or is replaced during startup. An integration check starts the customer service with fixture fonts and private config, verifies health/auth/font routes and confirms no secret is exported to the environment. All traffic remains synthetic. Environment-only Docker deployment remains supported. See CPANEL.md for the template and precedence.
+The complete Python suite passes **90 tests** locally and in hosted CI run 44100679806, job 134099536087, on source ed1479b9fee5cd79b5d1236d7918fbaf8d4ea93c. The same job passed the TypeScript/Vite build. This adds private JSON configuration loading for Passenger with bounded reads, owner/mode checks, no symlinks/hard links, duplicate/unknown-field rejection, environment precedence and safe failures when a file disappears or is replaced during startup. An integration check starts the customer service with fixture fonts and private config, verifies health/auth/font routes and confirms no secret is exported to the environment. All traffic remains synthetic. Environment-only Docker deployment remains supported. See CPANEL.md for the template and precedence.
 
 ## Packaged artifacts
 
 - Windows x64 NSIS packaging and eight-second native startup passed in runs 44066450575 and 44067697227, and the Windows job of run 44068751154. This establishes native process startup, not interactive install/sign-in or real billing.
+- On source ed1479b9fee5cd79b5d1236d7918fbaf8d4ea93c, desktop contracts and the Windows native package/startup job 134099906669 in run 44100679659 also passed. The Mac job was still queued at the last check; no new native Mac result is claimed.
 - Artifact 14319948055 was downloaded; ZIP CRC passed and SHA-256 matched GitHub digest 891e7d6308ee0f943e832496a9feccd2aa0682ca6746e0bd6aa1e5db218f41c5. It contains the unsigned TEST installer and blockmap.
 - Unsigned validation ZIPs were also cross-packaged for Windows x64 and Mac Intel x64/Apple Silicon arm64. CRC checks passed. Mac bundle ID/version/macOS 13 minimum and Windows packaged source/version/AGPL license were inspected.
 - Local NSIS first lacked Wine; the official bundle then failed with wineserver socket Operation not permitted. No bypass was attempted, and its incomplete EXE is not delivered. Native Windows CI subsequently built the complete installer.
@@ -28,7 +29,7 @@ The complete local Python suite now passes **90 tests**. This adds private JSON 
 
 ## Production acceptance not established
 
-Read-only cPanel inspection found Python 3.12.16, Node and Passenger, without Docker/uv. Studio DNS resolved through Cloudflare. Studio SSO files were not installed. The authenticated browser subsequently timed out. On reconnection, cPanel reported that the IP address had changed and required login again. No production file, environment value, migration, account record or wallet transaction was changed. No paid model request was issued.
+Read-only cPanel inspection found Python 3.12.16, Node and Passenger, without Docker/uv. Studio DNS resolved through Cloudflare. Studio SSO files were not installed. The authenticated browser subsequently timed out. On reconnection cPanel required login after an IP change; authenticated Tools and Terminal pages were later observed. A new read-only preflight submission timed out and its output was not observed. No production file, environment value, migration, account record or wallet transaction was changed. No paid model request was issued.
 
 Live login/registration/2FA, actual font/layout rendering, real proxy streaming/disconnects, interactive native install/logout, signing/notarization and ledger reconciliation remain pending. Public installers and update feeds must stay unpublished until acceptance and its matching record are complete. The website gate rejects unapproved, unsigned, missing or malformed release manifests.
 
