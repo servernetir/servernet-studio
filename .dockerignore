@@ -1,0 +1,8 @@
+.git
+**/node_modules
+**/__pycache__
+**/.env
+**/*.db
+servernet/runtime
+servernet/web/dist
+servernet/web/public/fonts

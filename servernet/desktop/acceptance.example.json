@@ -1,0 +1,17 @@
+{
+  "origin": "https://studio.servernet.cloud",
+  "source_sha": "REPLACE_WITH_TESTED_40_CHARACTER_COMMIT_SHA",
+  "checked_at": "REPLACE_WITH_ACTUAL_ACCEPTANCE_ISO_TIMESTAMP",
+  "checks": {
+    "account_login": false,
+    "google_login": false,
+    "registration_return": false,
+    "two_factor": false,
+    "wallet_read": false,
+    "billing_reconciled": false,
+    "owner_isolation": false,
+    "font_rendering": false,
+    "native_install": false,
+    "native_logout": false
+  }
+}

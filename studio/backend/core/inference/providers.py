@@ -12,6 +12,23 @@ from typing import Any
 from urllib.parse import quote, urlsplit, urlunsplit
 
 PROVIDER_REGISTRY: dict[str, dict[str, Any]] = {
+    "servernet": {
+        "display_name": "ServerNet AI Gateway",
+        "api_key_url": "https://console.servernet.cloud/account/ai",
+        "base_url": "https://servernet.cloud/v1",
+        "default_models": [],
+        "supports_streaming": True,
+        # Capabilities vary per gateway model; enable richer modalities after
+        # the catalog exposes a verified per-model contract.
+        "supports_vision": False,
+        "supports_tool_calling": False,
+        "studio_tools": False,
+        "auth_header": "Authorization",
+        "auth_prefix": "Bearer ",
+        "base_url_editable": False,
+        "model_ids_editable": False,
+        "notes": "Customer-scoped ServerNet AI key. Billing is handled by the existing ServerNet wallet.",
+    },
     "openai_codex": {
         "display_name": "ChatGPT / Codex subscription",
         "base_url": "https://chatgpt.com/backend-api",

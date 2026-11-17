@@ -21,6 +21,7 @@ import {
 } from "./external-providers";
 
 const POPULAR_PROVIDER_TYPES = [
+  "servernet",
   "openai_codex",
   "openai",
   "anthropic",

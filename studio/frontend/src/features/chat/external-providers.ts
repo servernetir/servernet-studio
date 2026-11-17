@@ -599,6 +599,7 @@ export function isCustomProviderType(
 }
 
 const REMOTE_MODEL_CATALOG_CUSTOM_PROVIDER_TYPES = new Set([
+  "servernet",
   LEGACY_CUSTOM_PROVIDER_TYPE,
   "ollama",
   "vllm",

@@ -1,0 +1,15 @@
+services:
+  studio:
+    build:
+      context: ..
+      dockerfile: servernet/Dockerfile
+    env_file: .env
+    ports: ['127.0.0.1:8787:8787']
+    volumes:
+      - ./runtime:/data
+      - ${SERVERNET_FONT_DIRECTORY}:/run/servernet/fonts:ro
+    read_only: true
+    tmpfs: ['/tmp']
+    cap_drop: [ALL]
+    security_opt: ['no-new-privileges:true']
+    restart: unless-stopped

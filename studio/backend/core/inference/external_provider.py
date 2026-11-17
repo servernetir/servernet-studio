@@ -60,6 +60,7 @@ _USAGE_STREAM_OPTION_PROVIDERS = frozenset(
         "qwencloud",
         "xai",
         "azure",
+        "servernet",
     }
 )
 
@@ -1173,13 +1174,13 @@ def _with_max_completion_tokens(body: dict[str, Any]) -> dict[str, Any]:
 
 @contextlib.asynccontextmanager
 async def _stream_post_with_compat_fallbacks(
-    http: httpx.AsyncClient, url: str, body: dict[str, Any], **kwargs
+    http: httpx.AsyncClient, url: str, body: dict[str, Any], *, allow_compat_fallbacks: bool = True, **kwargs
 ):
     """Resend on a refused `max_tokens` or `json_object` before yielding; each rewrite removes its own trigger,
     so each field changes at most once."""
     while True:
         async with http.stream("POST", url, json = body, **kwargs) as response:
-            if response.status_code != 400:
+            if response.status_code != 400 or not allow_compat_fallbacks:
                 yield response
                 return
             error_text = (await response.aread()).decode("utf-8", errors = "replace")
@@ -1701,6 +1702,12 @@ class ExternalProviderClient:
 
     def _chat_headers(self, thread_id: Optional[str]) -> dict[str, str]:
         headers = self._auth_headers()
+        if self.provider_type == "servernet":
+            # One key per completion, including title/compaction calls. A
+            # conversation ID would incorrectly reuse a key for changed bodies.
+            # Do not let a saved static extra header replace this request key.
+            headers = {k: v for k, v in headers.items() if k.lower() != "idempotency-key"}
+            headers["Idempotency-Key"] = "sn-studio-" + uuid.uuid4().hex
         base = urlparse(self.base_url)
         if (
             base.scheme == "https"
@@ -2067,6 +2074,7 @@ class ExternalProviderClient:
                 body,
                 headers = self._chat_headers(thread_id),
                 timeout = self._stream_timeout,
+                allow_compat_fallbacks = self.provider_type != "servernet",
             ) as response:
                 if response.status_code != 200:
                     error_body = await response.aread()
@@ -7347,7 +7355,7 @@ class ExternalProviderClient:
             headers = headers,
             timeout = self._timeout,
         )
-        if "max_tokens" in body and _rejects_max_tokens(response.status_code, response.text):
+        if self.provider_type != "servernet" and "max_tokens" in body and _rejects_max_tokens(response.status_code, response.text):
             response = await _client().post(
                 url,
                 json = _with_max_completion_tokens(body),
@@ -7579,6 +7587,15 @@ class ExternalProviderClient:
             return await self._list_cohere_models()
         try:
             data, models = await self._models_payload(self._timeout)
+            if self.provider_type == "servernet":
+                # The same catalog serves embeddings, rerank and native media.
+                # They cannot be sent to /chat/completions. Missing categories
+                # are also excluded instead of guessing from a model name.
+                models = [
+                    m for m in models
+                    if m.get("category") == "chat"
+                    and isinstance(m.get("id"), str) and m["id"].strip()
+                ]
             if self.provider_type == "vercel":
                 # Embedding, image, video and speech models share the list; only `language` ones chat.
                 models = [

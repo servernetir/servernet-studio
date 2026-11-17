@@ -1,0 +1,8 @@
+node_modules/
+release/
+acceptance.json
+*.p12
+*.pfx
+*.pem
+*.key
+*.cer
