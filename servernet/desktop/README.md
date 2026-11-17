@@ -6,7 +6,7 @@ This is the independent ServerNet customer client. It connects to the hosted Stu
 
 | Platform | Current artifact | Public installer target |
 | --- | --- | --- |
-| Windows x64 | Unsigned validation ZIP | Signed NSIS EXE |
+| Windows x64 | Unsigned validation NSIS installer and ZIP | Signed NSIS EXE |
 | macOS Intel x64 | Unsigned validation app ZIP | Signed/notarized DMG and update ZIP |
 | macOS Apple Silicon arm64 | Unsigned validation app ZIP | Signed/notarized DMG and update ZIP |
 
@@ -49,7 +49,7 @@ The website page is `/studio/download` with fa/en/tr variants. Its feature stays
 
 ## Current deployment status
 
-The cPanel session is authenticated. Read-only inspection found Python 3.12.16, Node and Passenger, with Docker absent; Studio DNS resolves through Cloudflare. The application and SSO migrations/configuration have not been installed. Existing `compose.yaml` targets a Docker host; Passenger would need a separately validated ASGI deployment path. No production wallet or customer record was changed. GitHub still rejects writes to the new repository, and its installation settings ask for the owner's passkey/2FA confirmation.
+The cPanel session is authenticated. Read-only inspection found Python 3.12.16, Node and Passenger, with Docker absent; Studio DNS resolves through Cloudflare. The application and SSO migrations/configuration have not been installed. Existing `compose.yaml` targets a Docker host; Passenger would need a separately validated ASGI deployment path. No production wallet or customer record was changed. GitHub access was restored by the owner and source is published in develop. The browser connection subsequently timed out before production installation.
 
 Rollback: keep the core download feature off, revert the application source/image, and retain the encrypted BFF database with its matching encryption key. Revoke Studio keys if necessary; do not erase financial history.
 
