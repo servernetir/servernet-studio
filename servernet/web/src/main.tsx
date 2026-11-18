@@ -4,12 +4,15 @@ import {useEffect, useLayoutEffect, useRef, useState} from 'react';
 import {createRoot} from 'react-dom/client';
 import {ArrowUp, ArrowUpRight, Code2, Lightbulb, Menu, MessageSquare, Moon, PanelLeftClose, PanelLeftOpen, ShieldCheck, Sparkles, Sun, Wallet} from 'lucide-react';
 import {copy, workspaceCopy, type Locale} from './copy';
-import {readModels, type Model} from './catalog';
-import {ConversationLibrary, ModelCatalog, WorkspaceSidebar, localizedUrl, viewFromHash, type Account, type Chat, type View} from './workspace';
+import {priceText, readModels, supportsStudio, type Model} from './catalog';
+import {ConversationLibrary, ModelCatalog, StudioTools, WorkspaceSidebar, localizedUrl, viewFromHash, type Account, type Chat, type View} from './workspace';
+import {ImageAttachment, MediaComposer, MediaResult, Thinking, normalizeImage, type MediaJob, type Parameters} from './inference';
+import {inferenceCopy} from './inference-copy';
 import './style.css';
 import './workspace.css';
+import './inference.css';
 
-type Message = {role: string; content: string};
+type Message = {role: string; content: string; media?: MediaJob; image?: string};
 type Theme = 'light' | 'dark';
 const LANGUAGE_KEY = 'servernet.studio.language';
 const THEME_KEY = 'servernet.studio.theme';
@@ -45,17 +48,25 @@ export function App() {
   const [active, setActive] = useState('');
   const [messages, setMessages] = useState<Message[]>([]);
   const [text, setText] = useState('');
+  const [image, setImage] = useState<string|null>(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
   const [pending, setPending] = useState(false);
   const [charge, setCharge] = useState<number | null>(null);
   const requestVersion = useRef(0);
-  const bottom = useRef<HTMLDivElement>(null);
+  const conversationBody = useRef<HTMLDivElement>(null);
+  const stickToBottom = useRef(true);
   const input = useRef<HTMLTextAreaElement>(null);
+  const mediaChecks = useRef(new Set<string>());
 
   const t = copy[locale];
   const w = workspaceCopy[locale];
-  const chatModels = models.filter(entry => entry.category === 'chat');
+  const f = inferenceCopy[locale];
+  const selectableModels = models.filter(supportsStudio);
+  const currentModel = models.find(entry => entry.id === model);
+  const visionModel = models.find(entry=>entry.vision);
+  const rate = account?.display?.eur_rate_irt ?? null;
+  const amount = (value: number) => priceText(value, locale, rate);
   const number = (value: number) => new Intl.NumberFormat(locale).format(value);
   const consoleUrl = (path: string) => localizedUrl('https://console.servernet.cloud', locale, path);
   const nextTheme = theme === 'dark' ? 'light' : 'dark';
@@ -85,7 +96,8 @@ export function App() {
   }, [mobile]);
 
   useEffect(() => {
-    bottom.current?.scrollIntoView({behavior: 'smooth'});
+    const panel=conversationBody.current;
+    if (panel && stickToBottom.current) panel.scrollTop=panel.scrollHeight;
   }, [messages, view]);
 
   async function api(path: string, init: RequestInit = {}) {
@@ -141,6 +153,54 @@ export function App() {
     if (location.hash.slice(1) !== target) location.hash = target;
   }
 
+  useEffect(() => {
+    if (!signed) return;
+    const acceptCapture = (event: MessageEvent) => {
+      if (event.source!==window || event.origin!==location.origin || event.data?.type!=='servernet.browser-capture.v1'
+        || typeof event.data.image!=='string' || event.data.image.length>2_800_000
+        || !/^data:image\/jpeg;base64,[a-zA-Z0-9+/]+={0,2}$/.test(event.data.image)) return;
+      if (busy || !visionModel) {
+        window.postMessage({type:'servernet.browser-capture.ack', id:event.data.id, accepted:false}, location.origin);
+        return;
+      }
+      setImage(event.data.image);
+      if (!currentModel?.vision) setModel(visionModel.id);
+      setText(previous=>previous || f.analyze);
+      navigate('chat');
+      window.postMessage({type:'servernet.browser-capture.ack', id:event.data.id, accepted:true}, location.origin);
+    };
+    window.addEventListener('message', acceptCapture);
+    return () => window.removeEventListener('message', acceptCapture);
+  }, [signed, visionModel, currentModel, busy, locale]);
+
+  async function attach(file: File) {
+    if (!visionModel || busy) return;
+    try {
+      setImage(await normalizeImage(file));
+      if (!currentModel?.vision) setModel(visionModel.id);
+      input.current?.focus();
+    } catch { setError(f.imageError); }
+  }
+
+  async function checkMedia(id: string) {
+    if (mediaChecks.current.has(id)) return;
+    mediaChecks.current.add(id);
+    try {
+      const job: MediaJob = await (await api('/api/media/'+id)).json();
+      setMessages(previous=>previous.map(message=>message.media?.id===id?{...message,media:job}:message));
+      if (job.state==='ready'||job.state==='failed') await refresh();
+    } catch (failure) { if (failure instanceof ApiError && failure.status===401) fail(failure); }
+    finally { mediaChecks.current.delete(id); }
+  }
+
+  const processingIds = messages.filter(message=>message.media?.state==='processing'||message.media?.state==='sending')
+    .map(message=>message.media!.id).join(',');
+  useEffect(() => {
+    if (!processingIds || !signed) return;
+    const timer=window.setInterval(()=>processingIds.split(',').forEach(id=>{void checkMedia(id);}), 8000);
+    return ()=>window.clearInterval(timer);
+  }, [processingIds, signed]);
+
   function changeTheme() {
     setTheme(nextTheme);
     savePreference(THEME_KEY, nextTheme);
@@ -157,6 +217,7 @@ export function App() {
       setMessages(detail.messages);
       setPending(Boolean(detail.pending));
       setCharge(null);
+      stickToBottom.current = true;
       navigate('chat');
     } catch (failure) {
       if (version === requestVersion.current) fail(failure);
@@ -172,21 +233,27 @@ export function App() {
     setError('');
     setCharge(null);
     setText('');
+    setImage(null);
+    stickToBottom.current = true;
     navigate('chat');
     input.current?.focus();
   }
 
   async function send() {
-    if (busy || pending || !model || !text.trim()) return;
+    if (busy || pending || !model || !text.trim() || (image && !currentModel?.vision)) return;
     ++requestVersion.current;
     const message = text.trim();
     setError('');
     setBusy(true);
     setCharge(null);
     setText('');
+    const sentImage=image;
+    setImage(null);
+    stickToBottom.current = true;
     let id = active;
     let received = '';
     let finished = false;
+    let frame: number | null = null;
     try {
       if (!id) {
         const chat = await (await api('/api/conversations', {method: 'POST'})).json();
@@ -194,12 +261,12 @@ export function App() {
         setActive(id);
         setChats(previous => [chat, ...previous]);
       }
-      const previous = [...messages, {role: 'user', content: message}];
+      const previous = [...messages, {role: 'user', content: message, image: sentImage ?? undefined}];
       setMessages([...previous, {role: 'assistant', content: ''}]);
       const requestId = crypto.randomUUID().replaceAll('-', '');
       const response = await api('/api/chat', {
         method: 'POST',
-        body: JSON.stringify({conversation_id: id, request_id: requestId, model, message}),
+        body: JSON.stringify({conversation_id: id, request_id: requestId, model, message, ...(sentImage ? {image:sentImage}:{})}),
       });
       const reader = response.body!.getReader();
       const decoder = new TextDecoder();
@@ -217,7 +284,10 @@ export function App() {
           const value = JSON.parse(raw);
           if (name === 'delta') {
             received += value.text;
-            setMessages([...previous, {role: 'assistant', content: received}]);
+            if (frame===null) frame=requestAnimationFrame(()=>{
+              frame=null;
+              if (!finished) setMessages([...previous, {role:'assistant',content:received}]);
+            });
           }
           if (name === 'done') {
             finished = true;
@@ -243,8 +313,52 @@ export function App() {
         }
       }
     } finally {
+      if (frame!==null) cancelAnimationFrame(frame);
       setBusy(false);
     }
+  }
+
+  async function quoteMedia(parameters: Parameters) {
+    const response=await api('/api/media/quote',{method:'POST',body:JSON.stringify({model,category:currentModel?.category,parameters})});
+    return (await response.json()).max_hold_irt as number;
+  }
+
+  async function generateMedia(parameters: Parameters,label: string,max: number) {
+    if (busy || !currentModel || currentModel.category==='chat') return;
+    setBusy(true);
+    setError('');
+    setCharge(null);
+    stickToBottom.current = true;
+    let id=active;
+    const requestId=crypto.randomUUID().replaceAll('-', '');
+    try {
+      if (!id) {
+        const chat=await (await api('/api/conversations',{method:'POST'})).json();
+        id=chat.id;
+        setActive(id);
+        setChats(previous=>[chat,...previous]);
+      }
+      const previous=[...messages,{role:'user',content:label}];
+      setMessages([...previous,{role:'assistant',content:'',media:{id:requestId,state:'sending'}}]);
+      const job:MediaJob=await (await api('/api/media',{method:'POST',body:JSON.stringify({
+        model,category:currentModel.category,parameters,label,conversation_id:id,request_id:requestId,max_hold_irt:max,
+      })})).json();
+      setMessages([...previous,{role:'assistant',content:'',media:job}]);
+      setText('');
+      setChats(await (await api('/api/conversations')).json());
+      await refresh();
+    } catch (failure) {
+      fail(failure);
+      if (id) {
+        try {
+          const detail=await (await api('/api/conversations/'+id)).json();
+          setMessages(detail.messages);
+        } catch {
+          setMessages(previous=>previous.map(message=>message.media?.id===requestId?
+            {...message,media:{id:requestId,state:'unknown'}}:message));
+        }
+      }
+    } finally { setBusy(false); }
   }
 
   async function logout() {
@@ -259,6 +373,7 @@ export function App() {
       setActive('');
       setError('');
       setText('');
+      setImage(null);
       setPending(false);
       setCharge(null);
       navigate('chat');
@@ -312,10 +427,10 @@ export function App() {
 
   const sidebarLabel = collapsed ? w.expand : w.collapse;
   const SidebarIcon = collapsed ? PanelLeftOpen : PanelLeftClose;
-  const displayedView = view === 'models' ? w.catalog : view === 'library' ? w.history : w[view];
+  const displayedView = view==='tools'?f.tools:view === 'models' ? w.catalog : view === 'library' ? w.history : w[view];
   return <div className="workspace">
     <WorkspaceSidebar brand={brand} locale={locale} view={view} open={mobile} collapsed={collapsed} chats={chats}
-      active={active} account={account} busy={busy} number={number} close={() => setMobile(false)} navigate={navigate}
+      active={active} account={account} busy={busy} close={() => setMobile(false)} navigate={navigate}
       fresh={fresh} openChat={open} refreshBalance={refresh} logout={logout}/>
     {mobile && <button type="button" className="backdrop" aria-label={t.close} onClick={() => setMobile(false)}/>}
     <main className="main-panel">
@@ -328,8 +443,8 @@ export function App() {
           {view === 'chat'
             ? <div className="model-selector">
               <span className="model-dot" aria-hidden="true"/>
-              <select aria-label={t.model} value={model} onChange={event => setModel(event.target.value)} disabled={busy || !chatModels.length}>
-                {chatModels.length ? chatModels.map(entry => <option key={entry.id} value={entry.id}>{entry.label}</option>) : <option value="">{t.noModels}</option>}
+              <select aria-label={f.model} value={model} onChange={event => setModel(event.target.value)} disabled={busy || !selectableModels.length}>
+                {selectableModels.length ? selectableModels.map(entry => <option key={entry.id} value={entry.id}>{entry.label}</option>) : <option value="">{t.noModels}</option>}
               </select>
             </div>
             : <span className="header-location">{displayedView}</span>}
@@ -341,10 +456,14 @@ export function App() {
         </div>
       </header>
       {view === 'library' ? <ConversationLibrary locale={locale} chats={chats} busy={busy} open={open}/>
-        : view !== 'chat' ? <ModelCatalog key={view} locale={locale} models={models} view={view} busy={busy} number={number}
-          choose={id => { setModel(id); navigate('chat'); }}/>
+        : view === 'tools' ? <StudioTools locale={locale}/>
+        : view !== 'chat' ? <ModelCatalog key={view} locale={locale} models={models} view={view} busy={busy} rate={rate}
+          choose={id => { fresh(); setModel(id); }}/>
         : <>
-          <div className="conversation-body">
+          <div className="conversation-body" ref={conversationBody} onScroll={event=>{
+            const panel=event.currentTarget;
+            stickToBottom.current=panel.scrollHeight-panel.scrollTop-panel.clientHeight<120;
+          }}>
             {messages.length === 0 ? <div className="welcome">
               <span className="welcome-icon"><img src="/servernet.svg" alt=""/></span>
               <h1>{t.title}</h1>
@@ -360,10 +479,12 @@ export function App() {
                 <div className="message-avatar">{message.role === 'assistant' ? <img src="/servernet.svg" alt=""/> : account?.customer.name.charAt(0)}</div>
                 <div>
                   <b>{message.role === 'assistant' ? t.assistant : t.you}</b>
-                  <div className="message-content" dir="auto">{message.content || t.writing}</div>
+                  {message.image&&<img className="sent-image" src={message.image} alt={f.draftImage}/>}
+                  {message.media ? <MediaResult job={message.media} locale={locale} amount={amount} refresh={()=>{void checkMedia(message.media!.id);}}/> :
+                    !message.content&&message.role==='assistant'&&busy ? <Thinking locale={locale}/> :
+                    <div className="message-content" dir="auto">{message.content}</div>}
                 </div>
               </article>)}
-              <div ref={bottom}/>
             </div>}
           </div>
           <div className="composer-area">
@@ -371,8 +492,13 @@ export function App() {
               {pending ? t.unknown : error} <a href={consoleUrl('account/ai')} target="_blank" rel="noopener noreferrer">{t.console} ↗</a>
             </div>}
             {!model && <div className="notice">{t.noModels}</div>}
-            {charge !== null && <div className="charge">{t.charged} · {number(charge)} {t.toman}</div>}
-            <form className="composer" onSubmit={event => { event.preventDefault(); void send(); }}>
+            {charge !== null && <div className="charge">{t.charged} · {amount(charge)??f.unavailable}</div>}
+            {currentModel&&currentModel.category!=='chat' ?
+              <MediaComposer key={currentModel.id} model={currentModel} locale={locale} text={text} setText={setText}
+                amount={amount} quote={quoteMedia} generate={generateMedia} isSending={busy}/> :
+              <form className="composer" data-thinking={busy||undefined} onSubmit={event => { event.preventDefault(); void send(); }}>
+              {(image||visionModel)&&<ImageAttachment locale={locale} source={image} remove={()=>setImage(null)} attach={file=>{void attach(file);}}/>}
+              {image&&!currentModel?.vision&&<div className="notice">{f.useVision}</div>}
               <textarea ref={input} value={text} onChange={event => setText(event.target.value)} placeholder={t.placeholder} aria-label={t.placeholder}
                 maxLength={8000} rows={2} disabled={busy || pending || !model} onKeyDown={event => {
                   if (event.key === 'Enter' && !event.shiftKey && !event.nativeEvent.isComposing) {
@@ -381,9 +507,9 @@ export function App() {
                   }
                 }}/>
               <div className="composer-bottom">
-                <button type="submit" className="send" aria-label={t.send} disabled={busy || pending || !model || !text.trim()}><ArrowUp size={20}/></button>
+                <button type="submit" className="send" aria-label={t.send} disabled={busy || pending || !model || !text.trim() || Boolean(image&&!currentModel?.vision)}><ArrowUp size={20}/></button>
               </div>
-            </form>
+            </form>}
             <p className="composer-foot">{t.foot}</p>
           </div>
         </>}

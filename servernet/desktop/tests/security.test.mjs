@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 import {test} from 'node:test';
 import assert from 'node:assert/strict';
-import {ORIGIN, signinOptions, internal, external, browserApproval, sessionCookie, conversationExport} from '../src/policy.mjs';
+import {ORIGIN, signinOptions, internal, external, browserApproval, sessionCookie, conversationExport, mediaExport} from '../src/policy.mjs';
 import {signIn} from '../src/signin.mjs';
 
 test('navigation accepts only the Studio origin and exact sign-in choices',()=>{
@@ -38,6 +38,14 @@ test('browser handoff cannot substitute another request or destination',()=>{
   assert.equal(browserApproval(good,'b'.repeat(43)),false);
   assert.equal(browserApproval(good+'&redirect_uri=https://evil.test',id),false);
   assert.equal(browserApproval(good.replace(ORIGIN,'https://evil.test'),id),false);
+});
+test('generated media downloads are limited to the same origin and exact content types',()=>{
+  const id='b'.repeat(32), path='/api/media/'+id+'/asset/0?download=true';
+  assert.equal(mediaExport(ORIGIN+path,'image/png'),'studio-output-'+id+'.png');
+  assert.equal(mediaExport(ORIGIN+path,'text/html'),null);
+  assert.equal(mediaExport('https://untrusted.test'+path,'video/mp4'),null);
+  assert.equal(mediaExport(ORIGIN+path+'&next=1','image/png'),null);
+  assert.equal(external(ORIGIN+'/studio-chrome-extension.zip'),true);
 });
 test('session cookies reject other origins, names, expired and oversized lifetimes',()=>{
   const good={origin:ORIGIN,cookie_name:'__Host-servernet-studio',cookie_value:'a'.repeat(43),expires_at:1100};

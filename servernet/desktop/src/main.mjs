@@ -3,7 +3,7 @@ import {app, BrowserWindow, Menu, dialog, shell, net} from 'electron';
 import {fileURLToPath} from 'node:url';
 import {setTimeout as sleep} from 'node:timers/promises';
 import updater from 'electron-updater';
-import {ORIGIN, UPDATE_FEED, DOWNLOADS, signinOptions, internal, external, conversationExport} from './policy.mjs';
+import {ORIGIN, UPDATE_FEED, DOWNLOADS, signinOptions, internal, external, conversationExport, mediaExport} from './policy.mjs';
 import {signIn} from './signin.mjs';
 import {confirmConnection} from './connection-dialog.mjs';
 
@@ -89,13 +89,14 @@ async function createWindow() {
   contents.on('will-redirect',(event,value)=>{if(!internal(value))event.preventDefault();});
   contents.setWindowOpenHandler(({url})=>{if(ownPage()&&external(url))void shell.openExternal(url);return{action:'deny'};});
   function onDownload(event, item, sender) {
+    const mime=item.getMimeType();
     const filename = sender === contents && ownPage() && item.getURLChain().length === 1
-      ? conversationExport(item.getURL()) : null;
-    if (!filename || item.getMimeType() !== 'text/plain') {
+      ? (mime==='text/plain' ? conversationExport(item.getURL()) : mediaExport(item.getURL(),mime)) : null;
+    if (!filename) {
       event.preventDefault();
       return;
     }
-    item.setSaveDialogOptions({defaultPath: filename, filters: [{name: 'Text', extensions: ['txt']}]});
+    item.setSaveDialogOptions({defaultPath: filename, filters: [{name: 'Studio', extensions: [filename.split('.').at(-1)]}]});
   }
   session.on('will-download', onDownload);
   window.on('closed',()=>{session.removeListener('will-download', onDownload);login?.abort();window=null;});

@@ -2,9 +2,9 @@ name: ServerNet hosted service
 on:
   push:
     branches: [develop]
-    paths: ['servernet/hosted/**', 'servernet/tests/**', 'servernet/web/**', 'servernet/passenger_wsgi.py', 'servernet/requirements-test.txt', 'servernet/pytest.ini', '.github/workflows/servernet-hosted.yml']
+    paths: ['servernet/hosted/**', 'servernet/tests/**', 'servernet/web/**', 'servernet/extension/**', 'servernet/passenger_wsgi.py', 'servernet/requirements-test.txt', 'servernet/pytest.ini', '.github/workflows/servernet-hosted.yml']
   pull_request:
-    paths: ['servernet/hosted/**', 'servernet/tests/**', 'servernet/web/**', 'servernet/passenger_wsgi.py', 'servernet/requirements-test.txt', 'servernet/pytest.ini', '.github/workflows/servernet-hosted.yml']
+    paths: ['servernet/hosted/**', 'servernet/tests/**', 'servernet/web/**', 'servernet/extension/**', 'servernet/passenger_wsgi.py', 'servernet/requirements-test.txt', 'servernet/pytest.ini', '.github/workflows/servernet-hosted.yml']
 permissions:
   contents: read
 jobs:

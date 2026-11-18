@@ -1,0 +1,20 @@
+{
+  "manifest_version": 3,
+  "name": "ServerNet Studio Capture",
+  "version": "0.1.0",
+  "description": "Preview a screenshot of the visible Chrome tab and attach it to a ServerNet Studio chat.",
+  "minimum_chrome_version": "116",
+  "permissions": [
+    "activeTab",
+    "scripting"
+  ],
+  "host_permissions": [
+    "https://studio.servernet.cloud/*"
+  ],
+  "action": {
+    "default_popup": "popup.html"
+  },
+  "background": {
+    "service_worker": "worker.js"
+  }
+}

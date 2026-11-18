@@ -29,6 +29,7 @@ from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
 
 from servernet.hosted.config import runtime_environment
+from servernet.hosted.media import MAX_REQUEST, MEDIA_HOSTS, MediaStore, install_media, json_response
 
 # Registration includes the console's existing verification steps. This is only
 # a browser-bound PKCE transaction lifetime, not an authorization code lifetime.
@@ -158,7 +159,7 @@ class Store:
         return {'id': row['id'], 'title': row['title'], 'messages': messages, 'pending': dict(pending) if pending else None}
 
     def prepare_call(self, subject, body):
-        fingerprint = digest(json.dumps(body.model_dump(), sort_keys=True, ensure_ascii=False))
+        fingerprint = digest(json.dumps(body.model_dump(exclude_none=True), sort_keys=True, ensure_ascii=False))
         with self.connect() as db:
             db.execute('BEGIN IMMEDIATE')
             previous = db.execute('SELECT * FROM calls WHERE subject=? AND id=?', (subject, body.request_id)).fetchone()
@@ -174,7 +175,8 @@ class Store:
             if db.execute("SELECT 1 FROM calls WHERE subject=? AND conversation=? AND state IN ('sending','unknown')",
                           (subject, body.conversation_id)).fetchone():
                 raise HTTPException(409, 'A previous request in this conversation needs reconciliation.')
-            messages = [dict(m) for m in db.execute('SELECT role,content FROM messages WHERE conversation=? ORDER BY id', (body.conversation_id,))]
+            messages = [dict(m) for m in db.execute("""SELECT role,content FROM messages WHERE conversation=?
+                AND (role!='assistant' OR content!='') ORDER BY id""", (body.conversation_id,))]
             if len(messages) > 98 or sum(len(m['content']) for m in messages) > 120000:
                 raise HTTPException(422, 'Start a new conversation to continue within the context limit.')
             messages.append({'role': 'user', 'content': body.message})
@@ -199,19 +201,22 @@ class Store:
 
 class BodyLimit:
     """Bound JSON bodies even when a client sends chunked data without a length."""
-    def __init__(self, app):
+    def __init__(self, app, origin):
         self.app = app
+        self.origin = origin
 
     async def __call__(self, scope, receive, send):
         if scope['type'] != 'http' or scope['method'] != 'POST':
             return await self.app(scope, receive, send)
+        headers = dict(scope.get('headers', []))
+        limit = request_limit(scope['path'], headers.get(b'origin', b'').decode('latin1'), self.origin)
         body = bytearray()
         while True:
             message = await receive()
             if message['type'] == 'http.disconnect':
                 return
             body.extend(message.get('body', b''))
-            if len(body) > 32000:
+            if len(body) > limit:
                 return await JSONResponse({'detail': 'Request is too large.'}, 413)(scope, receive, send)
             if not message.get('more_body'):
                 break
@@ -230,6 +235,11 @@ class ChatRequest(BaseModel):
     request_id: str = Field(pattern=r'^[a-f0-9]{32}$')
     model: str = Field(min_length=1, max_length=120)
     message: str = Field(min_length=1, max_length=8000)
+    image: str | None = Field(default=None, max_length=2_800_000)
+
+
+def request_limit(path, origin, expected):
+    return MAX_REQUEST if origin == expected and path in ('/api/chat', '/api/media', '/api/media/quote') else 32000
 
 
 def event(name, data):
@@ -240,6 +250,7 @@ def create_app(settings: Settings, upstream: httpx.AsyncClient | None = None):
     from .desktop import DesktopLogin, TEXT, page
     store = Store(settings)
     desktop = DesktopLogin(store, settings)
+    media = MediaStore(store)
     client = upstream or httpx.AsyncClient(timeout=httpx.Timeout(120, read=90), trust_env=False, follow_redirects=False)
     @asynccontextmanager
     async def lifespan(app):
@@ -248,7 +259,7 @@ def create_app(settings: Settings, upstream: httpx.AsyncClient | None = None):
             await client.aclose()
 
     app = FastAPI(title='ServerNet Studio', docs_url=None, redoc_url=None, openapi_url=None, lifespan=lifespan)
-    app.add_middleware(BodyLimit)
+    app.add_middleware(BodyLimit, origin=settings.origin)
     app.state.store = store
 
     @app.middleware('http')
@@ -257,7 +268,7 @@ def create_app(settings: Settings, upstream: httpx.AsyncClient | None = None):
             length = int(request.headers.get('content-length', '0'))
         except ValueError:
             return JSONResponse({'detail': 'Invalid request length.'}, 400)
-        if length > 32000:
+        if length > request_limit(request.url.path, request.headers.get('origin'), settings.origin):
             return JSONResponse({'detail': 'Request is too large.'}, 413)
         response = await call_next(request)
         referrer_policy = 'no-referrer'
@@ -274,7 +285,9 @@ def create_app(settings: Settings, upstream: httpx.AsyncClient | None = None):
             'X-Frame-Options': 'DENY',
             'Content-Security-Policy': (
                 "default-src 'self'; script-src 'self'; style-src 'self'; font-src 'self'; "
-                "img-src 'self' data:; connect-src 'self'; frame-ancestors 'none'; base-uri 'none'; "
+                "img-src 'self' data: blob: " + ' '.join('https://' + host for host in MEDIA_HOSTS) + "; "
+                "media-src 'self' " + ' '.join('https://' + host for host in MEDIA_HOSTS) + "; "
+                "connect-src 'self'; frame-ancestors 'none'; base-uri 'none'; "
                 f"form-action {form_targets}"
             ),
         })
@@ -288,6 +301,8 @@ def create_app(settings: Settings, upstream: httpx.AsyncClient | None = None):
 
     def headers(row):
         return {'Authorization': 'Bearer ' + store.decrypt(row['token']), 'Accept': 'application/json'}
+
+    install_media(app, settings, store, media, client, authenticated, headers)
 
     @app.get('/auth/start')
     async def start(lang: str = 'fa', method: str = 'account'):
@@ -357,10 +372,25 @@ def create_app(settings: Settings, upstream: httpx.AsyncClient | None = None):
     async def account(request: Request):
         return await gateway_get('/studio/account', authenticated(request))
 
+    @app.get('/api/tools/mcp')
+    async def mcp_tools(request: Request):
+        row = authenticated(request)
+        request_headers = headers(row) | {'Accept':'application/json, text/event-stream', 'MCP-Protocol-Version':'2025-11-25'}
+        try:
+            code, _, body = await json_response(client, 'POST', settings.gateway+'/studio/mcp',
+                request_headers, {'jsonrpc':'2.0','id':1,'method':'tools/list'})
+        except (httpx.HTTPError, ValueError):
+            raise HTTPException(502, 'MCP catalogue unavailable.') from None
+        result = body.get('result')
+        if code != 200 or body.get('id') != 1 or not isinstance(result, dict) or not isinstance(result.get('tools'), list):
+            raise HTTPException(502, 'MCP catalogue unavailable.')
+        return {'tools': [{'name': tool['name']} for tool in result['tools'] if isinstance(tool, dict)
+                          and tool.get('name') == 'list_models']}
+
     @app.get('/api/models')
     async def models(request: Request, catalog: bool = False):
-        upstream = await gateway_get('/models', authenticated(request))
-        categories = ('chat', 'image', 'video', 'audio', 'music') if catalog else ('chat',)
+        upstream = await gateway_get('/models?studio=1' if catalog else '/models', authenticated(request))
+        categories = ('chat', 'image', 'video', 'audio', 'music', 'classification') if catalog else ('chat',)
         data = []
         for model in upstream.get('data', []):
             if not isinstance(model, dict) or model.get('category') not in categories or not isinstance(model.get('id'), str):
@@ -368,6 +398,9 @@ def create_app(settings: Settings, upstream: httpx.AsyncClient | None = None):
             entry = {'id': model['id'], 'context_length': model.get('context_length')}
             if catalog:
                 entry['category'] = model['category']
+                for key in ('name', 'vision', 'pricing', 'studio', 'endpoint', 'free'):
+                    if key in model:
+                        entry[key] = model[key]
             data.append(entry)
         return {'data': data}
 
@@ -401,7 +434,9 @@ def create_app(settings: Settings, upstream: httpx.AsyncClient | None = None):
     @app.get('/api/conversations/{identifier}')
     async def conversation(identifier: str, request: Request):
         row = authenticated(request)
-        return store.conversation(row['subject'], identifier)
+        detail = store.conversation(row['subject'], identifier)
+        detail['messages'] = media.messages(row['subject'], identifier)
+        return detail
 
     @app.get('/api/conversations/{identifier}/export')
     async def export_conversation(identifier: str, request: Request):
@@ -420,9 +455,28 @@ def create_app(settings: Settings, upstream: httpx.AsyncClient | None = None):
     @app.post('/api/chat')
     async def chat(body: ChatRequest, request: Request):
         row = authenticated(request, True)
+        if body.image is not None and (body.model == 'studio-free-chat' or not re.fullmatch(
+                r'data:image/(?:png|jpeg|webp);base64,[A-Za-z0-9+/]+={0,2}', body.image)):
+            raise HTTPException(422, 'Choose a supported image and vision model.')
         messages, replay = store.prepare_call(row['subject'], body)
         if replay is not None:
             return StreamingResponse(iter([event('done', replay)]), media_type='text/event-stream')
+        if body.model == 'studio-free-chat':
+            try:
+                code, _, data = await json_response(client, 'POST', settings.gateway + '/studio/free/chat',
+                    headers(row), {'model': body.model, 'messages': messages})
+            except (httpx.HTTPError, ValueError):
+                code, data = 503, {}
+            if code != 200 or type(data.get('charge_irt')) is not int or data['charge_irt'] != 0 \
+                    or not isinstance(data.get('text'), str) or not isinstance(data.get('usage'), dict):
+                store.fail_call(row['subject'], body.request_id, 'rejected')
+                raise HTTPException(429 if code == 429 else 503, 'Free Chat is temporarily unavailable.')
+            result = {'text': data['text'], 'usage': data['usage'], 'charge_irt': 0, 'request_id': body.request_id}
+            store.finish_call(row['subject'], body, data['text'], result)
+            return StreamingResponse(iter([event('done', result)]), media_type='text/event-stream')
+        if body.image:
+            messages[-1]['content'] = [{'type': 'text', 'text': body.message},
+                {'type': 'image_url', 'image_url': {'url': body.image}}]
         outgoing = client.build_request('POST', settings.gateway + '/chat/completions',
             headers=headers(row) | {'Idempotency-Key': 'studio-' + body.request_id},
             json={'model': body.model, 'messages': messages, 'max_tokens': 2048, 'stream': True,
