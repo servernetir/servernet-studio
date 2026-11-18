@@ -11,7 +11,8 @@ export function signinOptions(value) {
   const u = url(value);
   if (!u || u.origin !== ORIGIN || u.pathname !== '/auth/start') return null;
   const lang = u.searchParams.get('lang') || 'fa', method = u.searchParams.get('method') || 'account';
-  return LANGUAGES.includes(lang) && METHODS.includes(method) ? {lang, method} : null;
+  const theme = u.searchParams.get('theme') === 'light' ? 'light' : 'dark';
+  return LANGUAGES.includes(lang) && METHODS.includes(method) ? {lang, method, theme} : null;
 }
 export function internal(value) {
   const u = url(value);
@@ -22,8 +23,14 @@ export function external(value) {
   const u = url(value);
   if (!u || u.protocol !== 'https:' || u.port) return false;
   if (u.origin === 'https://console.servernet.cloud') return /^\/(?:en\/|tr\/)?(?:account(?:\/|$)|login(?:\/|$)|register(?:\/|$))/.test(u.pathname);
-  return u.origin === 'https://servernet.cloud' && /^\/(?:en\/|tr\/)?studio\/download\/?$/.test(u.pathname)
+  return u.origin === 'https://servernet.cloud' && /^\/(?:en\/|tr\/)?(?:studio\/download|ai\/(?:models|docs))\/?$/.test(u.pathname)
     || u.origin === ORIGIN && u.pathname === '/legal';
+}
+export function conversationExport(value) {
+  const u = url(value);
+  if (!u || u.origin !== ORIGIN || u.search || u.hash) return null;
+  const match = /^\/api\/conversations\/([a-f0-9]{32})\/export$/.exec(u.pathname);
+  return match ? `servernet-conversation-${match[1]}.txt` : null;
 }
 export function browserApproval(value, identifier) {
   const u = url(value);

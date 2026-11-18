@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 import {test} from 'node:test';
 import assert from 'node:assert/strict';
-import {ORIGIN, signinOptions, internal, external, browserApproval, sessionCookie} from '../src/policy.mjs';
+import {ORIGIN, signinOptions, internal, external, browserApproval, sessionCookie, conversationExport} from '../src/policy.mjs';
 import {signIn} from '../src/signin.mjs';
 
 test('navigation accepts only the Studio origin and exact sign-in choices',()=>{
@@ -11,14 +11,26 @@ test('navigation accepts only the Studio origin and exact sign-in choices',()=>{
   assert.equal(internal(ORIGIN+'/'),true);
   assert.equal(internal(ORIGIN+'/auth/callback?code=stolen'),false);
   assert.equal(internal(ORIGIN+'/api/session'),false);
-  assert.deepEqual(signinOptions(ORIGIN+'/auth/start?lang=tr&method=google'),{lang:'tr',method:'google'});
+  assert.deepEqual(signinOptions(ORIGIN+'/auth/start?lang=tr&method=google'),{lang:'tr',method:'google',theme:'dark'});
+  assert.deepEqual(signinOptions(ORIGIN+'/auth/start?lang=fa&theme=light'),{lang:'fa',method:'account',theme:'light'});
   assert.equal(signinOptions(ORIGIN+'/auth/start?method=../admin'),null);
   assert.equal(signinOptions(ORIGIN+'/auth/start?lang=de'),null);
 });
-test('external windows are confined to console and the product downloads page',()=>{
+test('external windows are confined to the reviewed ServerNet destinations',()=>{
   assert.equal(external('https://console.servernet.cloud/en/account/topup'),true);
   assert.equal(external('https://servernet.cloud/studio/download'),true);
+  assert.equal(external('https://servernet.cloud/en/ai/models?type=video'),true);
+  assert.equal(external('https://servernet.cloud/tr/ai/docs'),true);
   for(const value of ['https://evil.test','https://console.servernet.cloud:444/account','https://console.servernet.cloud/admin','https://servernet.cloud/downloads/evil.exe','https://console.servernet.cloud@evil.test/account'])assert.equal(external(value),false);
+});
+test('only a fixed Studio conversation export can produce a text filename', () => {
+  const id = 'a'.repeat(32);
+  const valid = ORIGIN + '/api/conversations/' + id + '/export';
+  assert.equal(conversationExport(valid), `servernet-conversation-${id}.txt`);
+  for (const value of [valid + '?redirect=1', valid + '#fragment', valid + '.exe',
+    valid.replace(id, 'other'), valid.replace(ORIGIN, 'https://evil.test'), ORIGIN + '/api/session']) {
+    assert.equal(conversationExport(value), null);
+  }
 });
 test('browser handoff cannot substitute another request or destination',()=>{
   const id='a'.repeat(43), good=ORIGIN+'/auth/desktop?request_id='+id;
@@ -43,8 +55,9 @@ function fixture(over={}){
   return {calls,io};
 }
 test('native handoff uses PKCE and installs the session outside the renderer',async()=>{
-  const {calls,io}=fixture();await signIn({lang:'fa',method:'google'},io,new AbortController().signal);
+  const {calls,io}=fixture();await signIn({lang:'fa',method:'google',theme:'light'},io,new AbortController().signal);
   assert.equal(calls[0].path,'/auth/desktop/start');assert.equal(calls[0].body.challenge.length,43);
+  assert.equal(calls[0].body.theme, undefined);
   assert.equal(calls[1].open.startsWith(ORIGIN+'/auth/desktop?'),true);
   assert.equal(calls[2].path,'/auth/desktop/poll');assert.equal(calls[2].body.verifier.length,43);
   assert.equal(calls[3].cookie.httpOnly,true);assert.equal(calls[4].complete,ORIGIN);
@@ -53,6 +66,19 @@ test('native handoff uses PKCE and installs the session outside the renderer',as
 test('cancel leaves no native session and never opens a browser',async()=>{
   const {calls,io}=fixture({confirmCode:async()=>false});await signIn({lang:'en',method:'account'},io,new AbortController().signal);
   assert.equal(calls.length,1);
+});
+test('an expired code or cancelled sign-in does not open the browser', async () => {
+  for (const abort of [false, true]) {
+    const controller = new AbortController();
+    const {calls, io} = fixture();
+    io.confirmCode = async () => {
+      if (abort) controller.abort();
+      else await io.sleep(3600000);
+      return true;
+    };
+    await assert.rejects(signIn({lang: 'en', method: 'account'}, io, controller.signal));
+    assert.equal(calls.length, 1);
+  }
 });
 test('invalid server handoff cannot open an arbitrary external URL',async()=>{
   const {calls,io}=fixture();const post=io.post;io.post=async(...args)=>{const r=await post(...args);r.data.browser_url='https://evil.test/';return r;};

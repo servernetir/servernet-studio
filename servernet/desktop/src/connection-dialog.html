@@ -1,0 +1,29 @@
+<!doctype html>
+<html lang="en" dir="ltr" data-theme="dark">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src 'self'; img-src 'self'; font-src 'self'; base-uri 'none'; form-action 'none'">
+  <title>ServerNet Studio</title>
+  <link rel="stylesheet" href="connection-dialog.css">
+</head>
+<body hidden>
+  <main aria-labelledby="title">
+    <header class="brand">
+      <img src="servernet.svg" alt="">
+      <bdi>ServerNet Studio</bdi>
+    </header>
+    <h1 id="title"></h1>
+    <p id="instructions"></p>
+    <section class="code-panel" aria-labelledby="codeLabel">
+      <span id="codeLabel"></span>
+      <code id="connection-code" dir="ltr"></code>
+    </section>
+    <p id="hint"></p>
+    <footer>
+      <button class="cancel" type="button" id="cancel"></button>
+      <button class="continue" type="button" id="continue"></button>
+    </footer>
+  </main>
+</body>
+</html>

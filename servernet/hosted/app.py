@@ -11,6 +11,7 @@ import asyncio
 import hashlib
 import json
 import os
+import re
 import secrets
 import sqlite3
 import time
@@ -23,7 +24,7 @@ from urllib.parse import urlencode, urlsplit
 import httpx
 from cryptography.fernet import Fernet
 from fastapi import FastAPI, HTTPException, Request
-from fastapi.responses import FileResponse, HTMLResponse, JSONResponse, RedirectResponse, StreamingResponse
+from fastapi.responses import FileResponse, HTMLResponse, JSONResponse, PlainTextResponse, RedirectResponse, StreamingResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
 
@@ -357,10 +358,18 @@ def create_app(settings: Settings, upstream: httpx.AsyncClient | None = None):
         return await gateway_get('/studio/account', authenticated(request))
 
     @app.get('/api/models')
-    async def models(request: Request):
-        catalog = await gateway_get('/models', authenticated(request))
-        return {'data': [{'id': m['id'], 'context_length': m.get('context_length')}
-            for m in catalog.get('data', []) if isinstance(m, dict) and m.get('category') == 'chat' and isinstance(m.get('id'), str)]}
+    async def models(request: Request, catalog: bool = False):
+        upstream = await gateway_get('/models', authenticated(request))
+        categories = ('chat', 'image', 'video', 'audio', 'music') if catalog else ('chat',)
+        data = []
+        for model in upstream.get('data', []):
+            if not isinstance(model, dict) or model.get('category') not in categories or not isinstance(model.get('id'), str):
+                continue
+            entry = {'id': model['id'], 'context_length': model.get('context_length')}
+            if catalog:
+                entry['category'] = model['category']
+            data.append(entry)
+        return {'data': data}
 
     @app.post('/api/logout')
     async def logout(request: Request):
@@ -393,6 +402,20 @@ def create_app(settings: Settings, upstream: httpx.AsyncClient | None = None):
     async def conversation(identifier: str, request: Request):
         row = authenticated(request)
         return store.conversation(row['subject'], identifier)
+
+    @app.get('/api/conversations/{identifier}/export')
+    async def export_conversation(identifier: str, request: Request):
+        row = authenticated(request)
+        if not re.fullmatch(r'[a-f0-9]{32}', identifier):
+            raise HTTPException(404, 'Conversation not found.')
+        conversation = store.conversation(row['subject'], identifier)
+        sections = [conversation['title']]
+        for message in conversation['messages']:
+            speaker = 'You' if message['role'] == 'user' else 'ServerNet'
+            sections.append(f"{speaker}:\n{message['content']}")
+        return PlainTextResponse('\n\n'.join(sections) + '\n', headers={
+            'Content-Disposition': f'attachment; filename="servernet-conversation-{identifier}.txt"',
+        })
 
     @app.post('/api/chat')
     async def chat(body: ChatRequest, request: Request):
