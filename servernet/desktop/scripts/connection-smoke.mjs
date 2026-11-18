@@ -14,7 +14,7 @@ const timeout = setTimeout(() => {
 app.whenReady().then(async () => {
   const parent = new BrowserWindow({width: 520, height: 460, webPreferences: {sandbox: true}});
   const code = 'ABCD-1234';
-  const originalClipboard = clipboard.readText();
+  const originalClipboard = await clipboard.readText();
 
   async function testDialog(config, expected, action) {
     stage = 'opening the ' + config.lang + ' dialog';
@@ -58,7 +58,7 @@ app.whenReady().then(async () => {
 
   try {
     await testDialog({lang: 'en', theme: 'dark'}, 'ltr', 'continue');
-    assert.equal(clipboard.readText(), code);
+    assert.equal(await clipboard.readText(), code);
     await testDialog({lang: 'fa', theme: 'light'}, 'rtl', 'escape');
     await testDialog({lang: 'tr', theme: 'dark'}, 'ltr', 'abort');
     console.log('Connection dialog rendered in all three languages. Copy, cancellation and abort checks passed.');
@@ -66,7 +66,7 @@ app.whenReady().then(async () => {
     console.error(error);
     process.exitCode = 1;
   } finally {
-    clipboard.writeText(originalClipboard);
+    await clipboard.writeText(originalClipboard);
     clearTimeout(timeout);
     app.exit(process.exitCode || 0);
   }

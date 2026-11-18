@@ -47,6 +47,7 @@ export function confirmConnection(parent, code, {lang, theme}, signal) {
     });
     const contents = modal.webContents;
     let finished = false;
+    let copying = false;
     function finish(confirmed, error) {
       if (finished) return;
       finished = true;
@@ -59,12 +60,17 @@ export function confirmConnection(parent, code, {lang, theme}, signal) {
     function cancel() {
       finish(false);
     }
-    function onAction(event, action) {
+    async function onAction(event, action) {
       if (event.sender !== contents || event.senderFrame !== contents.mainFrame || event.senderFrame.url !== page.href) return;
       if (action === 'cancel') cancel();
-      if (action !== 'continue' || finished || signal.aborted) return;
-      clipboard.writeText(code);
-      finish(true);
+      if (action !== 'continue' || finished || copying || signal.aborted) return;
+      copying = true;
+      try {
+        await clipboard.writeText(code);
+        finish(true);
+      } catch (error) {
+        finish(false, error);
+      }
     }
     ipcMain.on(actionChannel, onAction);
     signal.addEventListener('abort', cancel, {once: true});
