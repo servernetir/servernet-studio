@@ -1,11 +1,12 @@
 // SPDX-License-Identifier: AGPL-3.0-only
-import {app, BrowserWindow, Menu, dialog, shell, net} from 'electron';
+import {app, BrowserWindow, Menu, dialog, shell, net, ipcMain} from 'electron';
 import {fileURLToPath} from 'node:url';
 import {setTimeout as sleep} from 'node:timers/promises';
 import updater from 'electron-updater';
-import {ORIGIN, UPDATE_FEED, DOWNLOADS, signinOptions, internal, external, conversationExport, mediaExport} from './policy.mjs';
+import {COOKIE, ORIGIN, UPDATE_FEED, DOWNLOADS, signinOptions, internal, external, conversationExport, mediaExport} from './policy.mjs';
 import {signIn} from './signin.mjs';
 import {confirmConnection} from './connection-dialog.mjs';
+import {installBrowserWorkspace, workspacePreload} from './browser-workspace.mjs';
 
 app.setName('ServerNet Studio');
 if (!app.requestSingleInstanceLock()) app.quit();
@@ -34,6 +35,7 @@ const labels = {
 };
 const words = (lang) => labels[lang] || labels.en;
 const locale = () => app.getLocale().split('-')[0];
+const disconnectWorkspace = installBrowserWorkspace({ipcMain, BrowserWindow, dialog, studioWindow: () => window, locale});
 
 async function post(path, body, signal) {
   const response = await net.fetch(ORIGIN + path, {method:'POST', redirect:'error', credentials:'omit',
@@ -75,7 +77,8 @@ async function createWindow() {
   window = new BrowserWindow({width:1280,height:850,minWidth:390,minHeight:600,title:'ServerNet Studio',
     backgroundColor:'#0b1324',icon:fileURLToPath(new URL('../build/icon.png',import.meta.url)),
     webPreferences:{nodeIntegration:false,nodeIntegrationInWorker:false,contextIsolation:true,sandbox:true,
-      webSecurity:true,allowRunningInsecureContent:false,webviewTag:false,spellcheck:false,partition:'persist:servernet-studio'}});
+      webSecurity:true,allowRunningInsecureContent:false,webviewTag:false,spellcheck:false,partition:'persist:servernet-studio',
+      preload:fileURLToPath(workspacePreload)}});
   const contents=window.webContents, session=contents.session;
   session.setPermissionRequestHandler((_contents,_permission,callback)=>callback(false));
   session.setPermissionCheckHandler(()=>false);
@@ -87,6 +90,9 @@ async function createWindow() {
   });
   contents.on('will-frame-navigate',(event)=>{if(!event.isMainFrame)event.preventDefault();});
   contents.on('will-redirect',(event,value)=>{if(!internal(value))event.preventDefault();});
+  contents.on('did-start-navigation', event => {
+    if (event.isMainFrame && !event.isSameDocument) disconnectWorkspace();
+  });
   contents.setWindowOpenHandler(({url})=>{if(ownPage()&&external(url))void shell.openExternal(url);return{action:'deny'};});
   function onDownload(event, item, sender) {
     const mime=item.getMimeType();
@@ -98,8 +104,16 @@ async function createWindow() {
     }
     item.setSaveDialogOptions({defaultPath: filename, filters: [{name: 'Studio', extensions: [filename.split('.').at(-1)]}]});
   }
+  function onSessionChange(_event, cookie, _cause, removed) {
+    if (removed && cookie.name === COOKIE && cookie.domain === new URL(ORIGIN).hostname) disconnectWorkspace();
+  }
   session.on('will-download', onDownload);
-  window.on('closed',()=>{session.removeListener('will-download', onDownload);login?.abort();window=null;});
+  session.cookies.on('changed', onSessionChange);
+  window.on('closed',()=>{
+    session.removeListener('will-download', onDownload);
+    session.cookies.removeListener('changed', onSessionChange);
+    disconnectWorkspace(); login?.abort(); window=null;
+  });
   contents.on('did-fail-load',(_event,code,_description,_url,isMainFrame)=>{
     if(isMainFrame && code!==-3 && window) void window.loadFile(offline);
   });
@@ -115,7 +129,7 @@ async function createWindow() {
 }
 app.on('second-instance',()=>{if(window){if(window.isMinimized())window.restore();window.focus();}});
 app.on('window-all-closed',()=>{if(process.platform!=='darwin')app.quit();});
-app.on('before-quit',()=>login?.abort());
+app.on('before-quit',()=>{disconnectWorkspace();login?.abort();});
 app.whenReady().then(async()=>{
   updater.autoUpdater.logger=null; updater.autoUpdater.autoDownload=false; updater.autoUpdater.autoInstallOnAppQuit=false;
   updater.autoUpdater.allowPrerelease=false; updater.autoUpdater.allowDowngrade=false;

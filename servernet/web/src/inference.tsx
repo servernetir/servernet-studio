@@ -2,7 +2,7 @@
 import {useId, useRef, useState} from 'react';
 import {ArrowUpRight, ChevronDown, Download, ImagePlus, Paperclip, RefreshCw, SlidersHorizontal, X} from 'lucide-react';
 import type {Field, Model} from './catalog';
-import {copy, type Locale} from './copy';
+import type {Locale} from './copy';
 import {enumLabel, fieldHint, fieldLabel, inferenceCopy} from './inference-copy';
 
 export type Asset = {kind: 'image' | 'video' | 'audio' | 'link'; url: string; download?: string};
@@ -232,8 +232,8 @@ export function Thinking({text}: {text: string}) {
   </div>;
 }
 
-export function MediaResult({job,locale,amount,refresh}: {
-  job:MediaJob;locale:Locale;amount:(value:number)=>string|null;refresh:()=>void;
+export function MediaResult({job,locale,refresh}: {
+  job:MediaJob;locale:Locale;refresh:()=>void;
 }) {
   const f=inferenceCopy[locale];
   if (job.state==='sending'||job.state==='processing'||job.state==='unknown') return <div className="media-receipt media-working">
@@ -256,7 +256,6 @@ export function MediaResult({job,locale,amount,refresh}: {
           <a className="secondary-button" href={asset.url} target="_blank" rel="noopener noreferrer">{f.openResult}<ArrowUpRight size={15}/></a>}
       </>}
     </div>)}
-    {typeof job.charge_irt==='number'&&<small>{copy[locale].charged} · {amount(job.charge_irt)??f.unavailable}</small>}
   </div>;
 }
 

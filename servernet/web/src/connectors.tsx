@@ -1,12 +1,14 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 import {useEffect, useRef, useState, type FormEvent} from 'react';
-import {Globe, Laptop, Mail, Plus, Server, Unplug} from 'lucide-react';
+import {Download, Globe, Images, Mail, Plug, Plus, Server, Unplug} from 'lucide-react';
 import type {Locale} from './copy';
 import {connectorCopy} from './connector-copy';
+import {DesktopConnection} from './desktop-connection';
+import {inferenceCopy} from './inference-copy';
 import './connectors.css';
 
-const kinds = ['ssh', 'https_token', 'gmail', 'desktop'] as const;
-const icons = {ssh: Server, https_token: Globe, gmail: Mail, desktop: Laptop};
+const kinds = ['ssh', 'https_token', 'gmail'] as const;
+const icons = {ssh: Server, https_token: Globe, gmail: Mail};
 type Kind = typeof kinds[number];
 type ManualKind = 'ssh' | 'https_token';
 type Connector = {
@@ -19,8 +21,8 @@ type Connector = {
   status: 'saved' | 'connected' | 'unreachable';
   last_checked_at: string | number | null;
 };
-type ConnectorList = {data: Connector[]; available: Kind[]};
-type Operation = 'check' | 'remove' | 'save' | 'gmail';
+type ConnectorList = {data: Connector[]; available: Kind[]; next_cursor?: string};
+type Operation = 'check' | 'remove' | 'save' | 'gmail' | 'page';
 
 class ConnectionError extends Error {
   constructor(readonly status: number) { super('Connection request failed'); }
@@ -53,6 +55,36 @@ function CheckTime({value, locale}: {value: string | number; locale: Locale}) {
   const date = new Date(typeof value === 'number' ? value * 1000 : value);
   if (Number.isNaN(date.getTime())) return null;
   return <time dateTime={date.toISOString()}>{new Intl.DateTimeFormat(locale, {dateStyle: 'medium', timeStyle: 'short'}).format(date)}</time>;
+}
+
+function IntegrationCards({locale}: {locale: Locale}) {
+  const t = inferenceCopy[locale];
+  const [state, setState] = useState<'checking' | 'ready' | 'error' | null>(null);
+  async function checkMcp() {
+    setState('checking');
+    try {
+      const response = await fetch('/api/tools/mcp');
+      const result = response.ok ? await response.json() : null;
+      setState(Array.isArray(result?.tools) && result.tools.some((tool: {name: string}) => tool.name === 'list_models') ? 'ready' : 'error');
+    } catch { setState('error'); }
+  }
+  return <>
+    <article className="connection-option">
+      <div className="connection-option-top"><span className="model-icon"><Images size={18} aria-hidden="true"/></span><h3>{t.browserHeading}</h3></div>
+      <p>{t.browserText}</p>
+      <a className="secondary-button" href="https://studio.servernet.cloud/studio-chrome-extension.zip"
+        target="_blank" rel="noopener noreferrer"><Download size={16} aria-hidden="true"/>{t.extension}</a>
+      <small className="connection-note">{t.install}</small>
+    </article>
+    <article className="connection-option">
+      <div className="connection-option-top"><span className="model-icon"><Plug size={18} aria-hidden="true"/></span><h3>{t.mcpHeading}</h3></div>
+      <p>{t.mcpText}</p>
+      <input className="connector-mcp-url" dir="ltr" readOnly aria-label={t.mcpHeading} value="https://servernet.cloud/v1/studio/mcp"
+        onFocus={event => event.target.select()}/>
+      <button type="button" className="secondary-button" onClick={() => void checkMcp()} disabled={state === 'checking'}>{t.testMcp}</button>
+      {(state === 'ready' || state === 'error') && <small role="status">{state === 'ready' ? t.mcpReady : t.mcpError}</small>}
+    </article>
+  </>;
 }
 
 export function ConnectedServices({locale, csrf, useInChat}: {locale: Locale; csrf: string; useInChat?: (text: string) => void}) {
@@ -168,6 +200,17 @@ export function ConnectedServices({locale, csrf, useInChat}: {locale: Locale; cs
     });
   }
 
+  function loadMore(before: string) {
+    void run('', 'page', async () => {
+      const page = await request<ConnectorList>('?before=' + encodeURIComponent(before));
+      setConnections(current => {
+        if (!current) return page;
+        const existing = new Set(current.data.map(entry => entry.id));
+        return {...page, data: [...current.data, ...page.data.filter(entry => !existing.has(entry.id))]};
+      });
+    });
+  }
+
   function shareResult(entry: Connector) {
     const count = unread[entry.id];
     const result = entry.kind === 'gmail' && count !== undefined
@@ -176,7 +219,7 @@ export function ConnectedServices({locale, csrf, useInChat}: {locale: Locale; cs
     useInChat?.(t.resultLabel + '\n' + (entry.kind === 'gmail' ? t.gmail : entry.name) + ' · ' + result);
   }
 
-  const descriptions = {ssh: t.sshDetail, https_token: t.httpsDetail, gmail: t.gmailDetail, desktop: t.desktopDetail};
+  const descriptions = {ssh: t.sshDetail, https_token: t.httpsDetail, gmail: t.gmailDetail};
   return <section className="tool-view connections-view" aria-labelledby="connections-heading">
     <header className="tool-heading">
       <div><h1 id="connections-heading">{t.heading}</h1><p>{t.intro}</p></div>
@@ -224,6 +267,8 @@ export function ConnectedServices({locale, csrf, useInChat}: {locale: Locale; cs
               </li>;
             })}
           </ul> : <p className="connections-empty">{t.empty}</p>}
+          {connections.next_cursor && <button type="button" className="secondary-button connection-more" disabled={!!pending}
+            onClick={() => loadMore(connections.next_cursor!)}>{pending?.action === 'page' ? t.loading : t.showMore}</button>}
         </section>
         <section className="connections-section" aria-labelledby="connections-add">
           <h2 id="connections-add">{t.addHeading}</h2>
@@ -235,7 +280,7 @@ export function ConnectedServices({locale, csrf, useInChat}: {locale: Locale; cs
                 <div className="connection-option-top"><span className="model-icon"><Icon size={18} aria-hidden="true"/></span>
                   <h3>{t[kind]}</h3></div>
                 <p>{descriptions[kind]}</p>
-                {!available ? <span className="connection-unavailable">{t.unavailable}</span>
+                {!available ? <small className="connection-note">{kind === 'gmail' ? t.gmailSetup : t.unavailable}</small>
                   : kind === 'gmail' ? inDesktop
                     ? <a className="secondary-button" href="https://studio.servernet.cloud/#connectors" target="_blank" rel="noopener noreferrer">{t.openBrowser}</a>
                     : <button type="button" className="secondary-button" disabled={!!pending} onClick={startGmail}>{t.connect}</button>
@@ -245,6 +290,8 @@ export function ConnectedServices({locale, csrf, useInChat}: {locale: Locale; cs
                   </button>}
               </article>;
             })}
+            <DesktopConnection locale={locale}/>
+            <IntegrationCards locale={locale}/>
           </div>
           {form && <form key={form} id="connection-form" className="connection-form" onSubmit={event => save(event, form)} autoComplete="off">
             <h3>{t[form]}</h3>

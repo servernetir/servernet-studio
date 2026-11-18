@@ -17,12 +17,12 @@ from urllib.parse import urlsplit
 
 import asyncssh
 from cryptography.fernet import InvalidToken
-from fastapi import HTTPException, Request
+from fastapi import HTTPException, Query, Request
 from pydantic import BaseModel, ConfigDict, Field, SecretStr
 
 PUBLIC_FIELDS = 'id,kind,name,target,port,username,status,created_at,last_checked_at'
 NETWORK_KINDS = ('ssh', 'https_token')
-MAX_CONNECTORS = 12
+CONNECTOR_PAGE_SIZE = 30
 CHECK_INTERVAL = 20
 CHECK_TIMEOUT = 8
 LABEL = r'[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?'
@@ -81,14 +81,31 @@ class ConnectorStore:
                     secret TEXT NOT NULL, status TEXT NOT NULL, created_at INTEGER NOT NULL,
                     last_checked_at INTEGER);
                 CREATE INDEX IF NOT EXISTS connectors_owner ON connectors(subject, created_at);
+                CREATE INDEX IF NOT EXISTS connectors_cursor ON connectors(subject, created_at DESC, id DESC);
                 CREATE TABLE IF NOT EXISTS connector_checks(subject TEXT PRIMARY KEY, started_at INTEGER NOT NULL);
             ''')
 
-    def list(self, subject):
+    def page(self, subject, before):
+        params = [subject]
+        cursor = ''
+        if before:
+            timestamp, identifier = before.split('.')
+            cursor = ' AND (created_at, id) < (?, ?)'
+            params.extend([int(timestamp), identifier])
         with self.store.connect() as db:
-            return [dict(row) for row in db.execute(
-                f'SELECT {PUBLIC_FIELDS} FROM connectors WHERE subject=? ORDER BY created_at DESC, rowid DESC',
-                (subject,))]
+            rows = [dict(row) for row in db.execute(f'''SELECT {PUBLIC_FIELDS} FROM connectors
+                WHERE subject=?{cursor} ORDER BY created_at DESC, id DESC LIMIT ?''',
+                (*params, CONNECTOR_PAGE_SIZE + 1))]
+        records = rows[:CONNECTOR_PAGE_SIZE]
+        page = {'data': records}
+        if len(rows) > CONNECTOR_PAGE_SIZE:
+            last = records[-1]
+            page['next_cursor'] = f"{last['created_at']}.{last['id']}"
+        return page
+
+    def has_kind(self, subject, kind):
+        with self.store.connect() as db:
+            return db.execute('SELECT 1 FROM connectors WHERE subject=? AND kind=?', (subject, kind)).fetchone() is not None
 
     def add(self, subject, *, kind, name, target, secret, port=None, username=None, status='saved'):
         row = dict(id=uuid.uuid4().hex, kind=kind, name=name, target=target, port=port, username=username,
@@ -99,8 +116,6 @@ class ConnectorStore:
             if kind == 'gmail' and db.execute(
                     'SELECT 1 FROM connectors WHERE subject=? AND kind=?', (subject, kind)).fetchone():
                 raise HTTPException(409, 'A Gmail connection already exists.')
-            if db.execute('SELECT COUNT(*) FROM connectors WHERE subject=?', (subject,)).fetchone()[0] >= MAX_CONNECTORS:
-                raise HTTPException(409, 'Connection limit reached.')
             db.execute(f'''INSERT INTO connectors(subject,secret,{PUBLIC_FIELDS})
                            VALUES (:subject,:secret,:id,:kind,:name,:target,:port,:username,
                                    :status,:created_at,:last_checked_at)''', dict(row, subject=subject, secret=encrypted))
@@ -277,9 +292,9 @@ def install_connectors(app, store, authenticated):
     tls_context = ssl.create_default_context()
 
     @app.get('/api/connectors')
-    async def connectors(request: Request):
+    async def connectors(request: Request, before: str | None = Query(None, pattern=r'^\d{1,11}\.[a-f0-9]{32}$')):
         subject = authenticated(request)['subject']
-        return {'available': vault.available, 'data': vault.list(subject)}
+        return {'available': vault.available, **vault.page(subject, before)}
 
     @app.post('/api/connectors', status_code=201)
     async def add_connector(request: Request):

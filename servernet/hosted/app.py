@@ -31,6 +31,7 @@ from pydantic import BaseModel, Field
 from servernet.hosted.config import runtime_environment
 from servernet.hosted.connectors import install_connectors
 from servernet.hosted.media import MAX_REQUEST, MEDIA_HOSTS, MediaStore, install_media, json_response
+from servernet.hosted.projects import ConversationProject, ProjectId, ProjectStore, install_projects
 
 # Registration includes the console's existing verification steps. This is only
 # a browser-bound PKCE transaction lifetime, not an authorization code lifetime.
@@ -97,6 +98,7 @@ class Store:
                 CREATE INDEX IF NOT EXISTS messages_conversation ON messages(conversation,id);
             ''')
         os.chmod(self.path, 0o600)
+        self.projects = ProjectStore(self)
 
     @contextmanager
     def connect(self):
@@ -161,7 +163,9 @@ class Store:
             messages = [dict(m) for m in db.execute('SELECT role,content FROM messages WHERE conversation=? ORDER BY id', (conversation_id,))]
             pending = db.execute("SELECT id,state FROM calls WHERE subject=? AND conversation=? AND state IN ('sending','unknown')",
                                  (subject, conversation_id)).fetchone()
-        return {'id': row['id'], 'title': row['title'], 'messages': messages, 'pending': dict(pending) if pending else None}
+            project = self.projects.conversation_project(db, subject, conversation_id)
+        return {'id': row['id'], 'title': row['title'], 'project_id': project,
+                'messages': messages, 'pending': dict(pending) if pending else None}
 
     def prepare_call(self, subject, body):
         fingerprint = digest(json.dumps(body.model_dump(exclude_none=True), sort_keys=True, ensure_ascii=False))
@@ -172,7 +176,7 @@ class Store:
                 if previous['fingerprint'] != fingerprint:
                     raise HTTPException(422, 'This request identifier belongs to a different message.')
                 if previous['state'] == 'done':
-                    return None, json.loads(previous['reply'])
+                    return None, set(), json.loads(previous['reply'])
                 raise HTTPException(409, 'This request is pending or already attempted. Check its billing status before sending again.')
             row = db.execute('SELECT * FROM conversations WHERE id=? AND subject=?', (body.conversation_id, subject)).fetchone()
             if row is None:
@@ -180,27 +184,26 @@ class Store:
             if db.execute("SELECT 1 FROM calls WHERE subject=? AND conversation=? AND state IN ('sending','unknown')",
                           (subject, body.conversation_id)).fetchone():
                 raise HTTPException(409, 'A previous request in this conversation needs reconciliation.')
-            messages = [dict(m) for m in db.execute("""SELECT role,content FROM messages WHERE conversation=?
-                AND (role!='assistant' OR content!='') ORDER BY id""", (body.conversation_id,))]
-            if len(messages) > 98 or sum(len(m['content']) for m in messages) > 120000:
-                raise HTTPException(422, 'Start a new conversation to continue within the context limit.')
-            messages.append({'role': 'user', 'content': body.message})
+            messages, sources = self.projects.context(db, subject, body.conversation_id, body.model, body.message)
             db.execute('INSERT INTO calls VALUES(?,?,?,?,?,?)', (subject, body.request_id, body.conversation_id, fingerprint, 'sending', None))
-        return messages, None
+        return messages, sources, None
 
     def fail_call(self, subject, request_id, state='unknown'):
         with self.connect() as db:
             db.execute("UPDATE calls SET state=? WHERE subject=? AND id=? AND state='sending'", (state, subject, request_id))
 
-    def finish_call(self, subject, body, text, result):
+    def finish_call(self, subject, body, text, result, sources):
         with self.connect() as db:
             db.execute('BEGIN IMMEDIATE')
             updated = db.execute("UPDATE calls SET state='done',reply=? WHERE subject=? AND id=? AND state='sending'",
                                  (json.dumps(result), subject, body.request_id)).rowcount
             if updated != 1:
                 raise RuntimeError('Request state changed before completion.')
-            db.executemany('INSERT INTO messages(conversation,role,content) VALUES(?,?,?)',
-                           [(body.conversation_id, 'user', body.message), (body.conversation_id, 'assistant', text)])
+            insert = 'INSERT INTO messages(conversation,role,content) VALUES(?,?,?)'
+            db.execute(insert, (body.conversation_id, 'user', body.message))
+            reply = db.execute(insert, (body.conversation_id, 'assistant', text))
+            if sources:
+                self.projects.remember_sources(db, reply.lastrowid, sources)
             db.execute("UPDATE conversations SET title=? WHERE id=? AND title='New conversation'", (body.message[:70], body.conversation_id))
 
 
@@ -311,6 +314,7 @@ def create_app(settings: Settings, upstream: httpx.AsyncClient | None = None):
     install_media(app, settings, store, media, client, authenticated, headers)
     vault = install_connectors(app, store, authenticated)
     install_gmail(app, settings, store, vault, client, authenticated)
+    install_projects(app, store.projects, authenticated)
 
     @app.get('/auth/start')
     async def start(lang: str = 'fa', method: str = 'account'):
@@ -426,18 +430,20 @@ def create_app(settings: Settings, upstream: httpx.AsyncClient | None = None):
         return response
 
     @app.get('/api/conversations')
-    async def conversations(request: Request):
+    async def conversations(request: Request, project_id: ProjectId | None = None, unfiled: bool = False):
         row = authenticated(request)
-        with store.connect() as db:
-            return [dict(r) for r in db.execute('SELECT id,title FROM conversations WHERE subject=? ORDER BY created DESC LIMIT 100', (row['subject'],))]
+        return store.projects.conversations(row['subject'], project_id, unfiled)
 
     @app.post('/api/conversations')
-    async def new_conversation(request: Request):
+    async def new_conversation(request: Request, body: ConversationProject | None = None):
         row = authenticated(request, True)
         identifier = uuid.uuid4().hex
+        project = body.project_id if body else None
         with store.connect() as db:
             db.execute('INSERT INTO conversations VALUES(?,?,?,?)', (identifier, row['subject'], 'New conversation', int(time.time())))
-        return {'id': identifier, 'title': 'New conversation'}
+            if project:
+                store.projects.attach(db, row['subject'], identifier, project)
+        return {'id': identifier, 'title': 'New conversation', 'project_id': project}
 
     @app.get('/api/conversations/{identifier}')
     async def conversation(identifier: str, request: Request):
@@ -466,7 +472,7 @@ def create_app(settings: Settings, upstream: httpx.AsyncClient | None = None):
         if body.image is not None and (body.model == 'studio-free-chat' or not re.fullmatch(
                 r'data:image/(?:png|jpeg|webp);base64,[A-Za-z0-9+/]+={0,2}', body.image)):
             raise HTTPException(422, 'Choose a supported image and vision model.')
-        messages, replay = store.prepare_call(row['subject'], body)
+        messages, sources, replay = store.prepare_call(row['subject'], body)
         if replay is not None:
             return StreamingResponse(iter([event('done', replay)]), media_type='text/event-stream')
         if body.model == 'studio-free-chat':
@@ -480,10 +486,10 @@ def create_app(settings: Settings, upstream: httpx.AsyncClient | None = None):
                 store.fail_call(row['subject'], body.request_id, 'rejected')
                 raise HTTPException(429 if code == 429 else 503, 'Free Chat is temporarily unavailable.')
             result = {'text': data['text'], 'usage': data['usage'], 'charge_irt': 0, 'request_id': body.request_id}
-            store.finish_call(row['subject'], body, data['text'], result)
+            store.finish_call(row['subject'], body, data['text'], result, sources)
             return StreamingResponse(iter([event('done', result)]), media_type='text/event-stream')
         if body.image:
-            messages[-1]['content'] = [{'type': 'text', 'text': body.message},
+            messages[-1]['content'] = [{'type': 'text', 'text': messages[-1]['content']},
                 {'type': 'image_url', 'image_url': {'url': body.image}}]
         outgoing = client.build_request('POST', settings.gateway + '/chat/completions',
             headers=headers(row) | {'Idempotency-Key': 'studio-' + body.request_id},
@@ -512,7 +518,7 @@ def create_app(settings: Settings, upstream: httpx.AsyncClient | None = None):
                         if usage is None or not isinstance(charge, int) or isinstance(charge, bool) or charge < 0:
                             raise ValueError('Final billing event missing')
                         result = {'text': content, 'usage': usage, 'charge_irt': charge, 'request_id': body.request_id}
-                        store.finish_call(row['subject'], body, content, result)
+                        store.finish_call(row['subject'], body, content, result, sources)
                         complete = True
                         yield event('done', result)
                         return

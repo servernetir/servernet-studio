@@ -2,22 +2,27 @@
 // Copyright 2026 ServerNet contributors
 import {useEffect, useLayoutEffect, useRef, useState} from 'react';
 import {createRoot} from 'react-dom/client';
-import {ArrowUp, ArrowUpRight, Code2, Lightbulb, Menu, MessageSquare, Moon, PanelLeftClose, PanelLeftOpen, ShieldCheck, Sparkles, Sun, Wallet} from 'lucide-react';
+import {ArrowUp, ArrowUpRight, ChartNoAxesColumnIncreasing, Code2, FolderOpen, Lightbulb, Menu, MessageSquare, Moon, PanelLeftClose, PanelLeftOpen, ShieldCheck, Sparkles, Sun, Wallet} from 'lucide-react';
 import {copy, workspaceCopy, type Locale} from './copy';
 import {priceText, readModels, supportsStudio, type Model} from './catalog';
-import {ConversationLibrary, ModelCatalog, StudioTools, WorkspaceSidebar, localizedUrl, viewFromHash, type Account, type Chat, type View} from './workspace';
+import {ConversationLibrary, ModelCatalog, WorkspaceSidebar, localizedUrl, viewFromHash, type Account, type Chat, type View} from './workspace';
 import {ImageAttachment, ImageAttachmentPreview, MediaComposer, MediaResult, Thinking, normalizeImage, type MediaJob, type Parameters} from './inference';
 import {inferenceCopy} from './inference-copy';
 import {connectorCopy} from './connector-copy';
 import {ConnectedServices} from './connectors';
+import {projectCopy} from './project-copy';
+import {ChatContext, HistoryDialog, ProjectDialog, ProjectFolder, ProjectsHome, UsageDialog,
+  projectIdFromHash, type Project, type ProjectChatState, type ProjectsState, type ProjectSettings} from './projects';
 import './style.css';
 import './workspace.css';
 import './inference.css';
 
 type Message = {role: string; content: string; media?: MediaJob; image?: string};
 type Theme = 'light' | 'dark';
+type WorkspaceDialog = {kind: 'project'; project: Project | null} | {kind: 'history' | 'usage'};
 const LANGUAGE_KEY = 'servernet.studio.language';
 const THEME_KEY = 'servernet.studio.theme';
+const PERSONAL_CONVERSATIONS = '/api/conversations?unfiled=true';
 
 function readPreference(key: string) {
   try { return localStorage.getItem(key); } catch { return null; }
@@ -38,6 +43,14 @@ export function App() {
   });
   const [theme, setTheme] = useState<Theme>(() => readPreference(THEME_KEY) === 'light' ? 'light' : 'dark');
   const [view, setView] = useState(viewFromHash);
+  const [projectPageId, setProjectPageId] = useState(projectIdFromHash);
+  const [chatProjectId, setChatProjectId] = useState<string | null>(null);
+  const [projects, setProjects] = useState<ProjectsState>({status: 'loading'});
+  const [projectRefresh, setProjectRefresh] = useState(0);
+  const [projectChats, setProjectChats] = useState<{id: string; chats: ProjectChatState} | null>(null);
+  const [projectChatsRefresh, setProjectChatsRefresh] = useState(0);
+  const [historyTurns, setHistoryTurns] = useState<number | null>(null);
+  const [dialog, setDialog] = useState<WorkspaceDialog | null>(null);
   const [collapsed, setCollapsed] = useState(false);
   const [mobile, setMobile] = useState(false);
   const [ready, setReady] = useState(false);
@@ -54,7 +67,6 @@ export function App() {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
   const [pending, setPending] = useState(false);
-  const [charge, setCharge] = useState<number | null>(null);
   const requestVersion = useRef(0);
   const conversationBody = useRef<HTMLDivElement>(null);
   const stickToBottom = useRef(true);
@@ -65,6 +77,11 @@ export function App() {
   const t = copy[locale];
   const w = workspaceCopy[locale];
   const f = inferenceCopy[locale];
+  const p = projectCopy[locale];
+  const projectList = projects.status === 'ready' ? projects.value : [];
+  const chatProject = projectList.find(project => project.id === chatProjectId) ?? null;
+  const pageProject = projectList.find(project => project.id === projectPageId) ?? null;
+  const sidebarProjectId = view === 'chat' ? chatProjectId : view === 'projects' ? pageProject?.id ?? null : null;
   const selectableModels = models.filter(supportsStudio);
   const currentModel = models.find(entry => entry.id === model);
   const visionModel = models.find(entry=>entry.vision);
@@ -85,6 +102,7 @@ export function App() {
   useEffect(() => {
     const update = () => {
       setView(viewFromHash());
+      setProjectPageId(projectIdFromHash());
       setMobile(false);
     };
     window.addEventListener('hashchange', update);
@@ -106,6 +124,47 @@ export function App() {
     const panel=conversationBody.current;
     if (panel && stickToBottom.current) panel.scrollTop=panel.scrollHeight;
   }, [messages, view]);
+
+  useEffect(() => {
+    if (!signed) return;
+    const controller = new AbortController();
+    async function getSettings(path: string) {
+      const response = await fetch(path, {signal: controller.signal});
+      if (!response.ok) throw new ApiError(response.status);
+      return response.json();
+    }
+    async function load() {
+      const [projectResult, preferences] = await Promise.allSettled([
+        getSettings('/api/projects'), getSettings('/api/preferences'),
+      ]);
+      if (controller.signal.aborted) return;
+      setProjects(projectResult.status === 'fulfilled' && Array.isArray(projectResult.value)
+        ? {status: 'ready', value: projectResult.value} : {status: 'error'});
+      if (preferences.status === 'fulfilled' && Number.isInteger(preferences.value.history_turns)) {
+        setHistoryTurns(preferences.value.history_turns);
+      }
+    }
+    void load();
+    return () => controller.abort();
+  }, [signed, projectRefresh]);
+
+  useEffect(() => {
+    if (!signed || !sidebarProjectId) return;
+    const id = sidebarProjectId;
+    const controller = new AbortController();
+    async function load() {
+      try {
+        const response = await fetch('/api/conversations?' + new URLSearchParams({project_id: id}), {signal: controller.signal});
+        if (!response.ok) throw new ApiError(response.status);
+        const value: Chat[] = await response.json();
+        if (!controller.signal.aborted) setProjectChats({id, chats: {status: 'ready', value}});
+      } catch {
+        if (!controller.signal.aborted) setProjectChats({id, chats: {status: 'error'}});
+      }
+    }
+    void load();
+    return () => controller.abort();
+  }, [signed, sidebarProjectId, projectChatsRefresh]);
 
   async function api(path: string, init: RequestInit = {}) {
     const response = await fetch(path, {
@@ -134,7 +193,7 @@ export function App() {
         if (!response.ok) throw new ApiError(response.status);
         const session = await response.json();
         const [wallet, catalog, history] = await Promise.all(
-          ['/api/account', '/api/models?catalog=true', '/api/conversations'].map(async path => (await api(path)).json()),
+          ['/api/account', '/api/models?catalog=true', PERSONAL_CONVERSATIONS].map(async path => (await api(path)).json()),
         );
         if (!live) return;
         const activeModels = readModels(catalog);
@@ -154,10 +213,30 @@ export function App() {
     return () => { live = false; };
   }, []);
 
-  function navigate(target: View) {
+  function navigate(target: View, projectId: string | null = null) {
     setView(target);
+    setProjectPageId(projectId);
     setMobile(false);
-    if (location.hash.slice(1) !== target) location.hash = target;
+    const hash = target === 'projects' && projectId ? `projects/${projectId}` : target;
+    if (location.hash.slice(1) !== hash) location.hash = hash;
+  }
+
+  async function saveProject(draft: ProjectSettings) {
+    const previous = dialog?.kind === 'project' ? dialog.project : null;
+    const path = previous ? '/api/projects/' + previous.id : '/api/projects';
+    const saved: Project = await (await api(path, {method: 'POST', body: JSON.stringify(draft)})).json();
+    setProjects(current => {
+      const value = current.status === 'ready' ? current.value : [];
+      return {status: 'ready', value: previous ? value.map(project => project.id === saved.id ? saved : project) : [saved, ...value]};
+    });
+    setDialog(null);
+    if (!previous) navigate('projects', saved.id);
+  }
+
+  async function saveHistory(turns: number) {
+    const preferences = await (await api('/api/preferences', {method: 'POST', body: JSON.stringify({history_turns: turns})})).json();
+    setHistoryTurns(preferences.history_turns);
+    setDialog(null);
   }
 
   function useConnectionResult(result: string) {
@@ -229,9 +308,14 @@ export function App() {
       const detail = await (await api('/api/conversations/' + chat.id)).json();
       if (version !== requestVersion.current) return;
       setActive(chat.id);
+      const ownerProject = detail.project_id ?? chat.project_id ?? null;
+      if (chatProjectId !== ownerProject) {
+        setText('');
+        setImage(null);
+      }
+      setChatProjectId(ownerProject);
       setMessages(detail.messages);
       setPending(Boolean(detail.pending));
-      setCharge(null);
       stickToBottom.current = true;
       navigate('chat');
     } catch (failure) {
@@ -239,19 +323,36 @@ export function App() {
     }
   }
 
-  function fresh() {
+  function fresh(projectId: string | null = null) {
     if (busy) return;
     ++requestVersion.current;
     setActive('');
+    setChatProjectId(projectId);
     setMessages([]);
     setPending(false);
     setError('');
-    setCharge(null);
     setText('');
     setImage(null);
     stickToBottom.current = true;
     navigate('chat');
     input.current?.focus();
+  }
+
+  async function createConversation(): Promise<Chat> {
+    const chat: Chat = await (await api('/api/conversations', {method: 'POST', body: JSON.stringify({project_id: chatProjectId})})).json();
+    if (chatProjectId) {
+      const id = chatProjectId;
+      setProjectChats(current => {
+        const previous = current?.id === id && current.chats.status === 'ready' ? current.chats.value : [];
+        return {id, chats: {status: 'ready', value: [chat, ...previous]}};
+      });
+    } else setChats(previous => [chat, ...previous]);
+    return chat;
+  }
+
+  async function refreshConversations() {
+    if (chatProjectId) setProjectChatsRefresh(version => version + 1);
+    else setChats(await (await api(PERSONAL_CONVERSATIONS)).json());
   }
 
   async function send() {
@@ -260,7 +361,6 @@ export function App() {
     const message = text.trim();
     setError('');
     setBusy(true);
-    setCharge(null);
     setText('');
     const sentImage=image;
     setImage(null);
@@ -273,10 +373,9 @@ export function App() {
     let frame: number | null = null;
     try {
       if (!id) {
-        const chat = await (await api('/api/conversations', {method: 'POST'})).json();
+        const chat = await createConversation();
         id = chat.id;
         setActive(id);
-        setChats(previous => [chat, ...previous]);
       }
       const requestId = crypto.randomUUID().replaceAll('-', '');
       const response = await api('/api/chat', {
@@ -307,14 +406,13 @@ export function App() {
           if (name === 'done') {
             finished = true;
             setMessages([...previous, {role: 'assistant', content: value.text}]);
-            setCharge(value.charge_irt);
           }
           if (name === 'error') throw new Error('Unconfirmed request');
         }
         if (chunk.done) break;
       }
       if (!finished) throw new Error('Incomplete stream');
-      setChats(await (await api('/api/conversations')).json());
+      await refreshConversations();
       await refresh();
     } catch (failure) {
       fail(failure);
@@ -347,16 +445,14 @@ export function App() {
     ++requestVersion.current;
     setBusy(true);
     setError('');
-    setCharge(null);
     stickToBottom.current = true;
     let id=active;
     const requestId=crypto.randomUUID().replaceAll('-', '');
     try {
       if (!id) {
-        const chat=await (await api('/api/conversations',{method:'POST'})).json();
+        const chat=await createConversation();
         id=chat.id;
         setActive(id);
-        setChats(previous=>[chat,...previous]);
       }
       const previous=[...messages,{role:'user',content:label}];
       setMessages([...previous,{role:'assistant',content:'',media:{id:requestId,state:'sending'}}]);
@@ -365,7 +461,7 @@ export function App() {
       })})).json();
       setMessages([...previous,{role:'assistant',content:'',media:job}]);
       setText('');
-      setChats(await (await api('/api/conversations')).json());
+      await refreshConversations();
       await refresh();
     } catch (failure) {
       fail(failure);
@@ -389,13 +485,17 @@ export function App() {
       setAccount(null);
       setMessages([]);
       setChats([]);
+      setProjects({status: 'loading'});
+      setProjectChats(null);
+      setChatProjectId(null);
+      setHistoryTurns(null);
+      setDialog(null);
       setCsrf('');
       setActive('');
       setError('');
       setText('');
       setImage(null);
       setPending(false);
-      setCharge(null);
       navigate('chat');
     } catch (failure) {
       fail(failure);
@@ -447,12 +547,15 @@ export function App() {
 
   const sidebarLabel = collapsed ? w.expand : w.collapse;
   const SidebarIcon = collapsed ? PanelLeftOpen : PanelLeftClose;
-  const displayedView = view === 'connectors' ? connectorCopy[locale].heading : view === 'tools' ? f.tools
+  const currentProjectChats: ProjectChatState = projectChats && projectChats.id === sidebarProjectId ? projectChats.chats : {status: 'loading'};
+  const recentChats = sidebarProjectId ? currentProjectChats.status === 'ready' ? currentProjectChats.value : [] : chats;
+  const displayedView = view === 'connectors' ? connectorCopy[locale].heading : view === 'projects' ? pageProject?.name ?? p.title
     : view === 'models' ? w.catalog : view === 'library' ? w.history : w[view];
   return <div className="workspace">
-    <WorkspaceSidebar brand={brand} locale={locale} view={view} open={mobile} collapsed={collapsed} chats={chats}
-      active={active} account={account} busy={busy} close={() => setMobile(false)} navigate={navigate}
-      fresh={fresh} openChat={open} refreshBalance={refresh} logout={logout}/>
+    <WorkspaceSidebar brand={brand} locale={locale} view={view} open={mobile} collapsed={collapsed} chats={recentChats}
+      active={active} account={account} busy={busy} withinProject={Boolean(sidebarProjectId)} close={() => setMobile(false)}
+      navigate={target => {if (target === 'chat' && chatProjectId) fresh(); else navigate(target);}}
+      fresh={() => fresh(sidebarProjectId)} openChat={open} refreshBalance={refresh} logout={logout}/>
     <button type="button" className="backdrop" data-open={mobile||undefined} tabIndex={mobile ? 0 : -1}
       aria-label={t.close} onClick={() => setMobile(false)}/>
     <main className="main-panel">
@@ -474,12 +577,21 @@ export function App() {
         <div className="workspace-header-right">
           {languages}
           <button type="button" className="icon-button" onClick={changeTheme} aria-label={themeLabel} title={themeLabel}><ThemeIcon size={18}/></button>
-          <span className="usage" title={t.usage}>{number((account?.ai.prompt_tokens_month ?? 0) + (account?.ai.completion_tokens_month ?? 0))} {t.token}</span>
+          {account && <button type="button" className="usage" title={p.usage} aria-label={p.usage} onClick={() => setDialog({kind: 'usage'})}>
+            <ChartNoAxesColumnIncreasing size={16} aria-hidden="true"/>
+            <span>{number(account.ai.prompt_tokens_month + account.ai.completion_tokens_month)} {t.token}</span>
+          </button>}
         </div>
       </header>
       {view === 'library' ? <ConversationLibrary locale={locale} chats={chats} busy={busy} open={open}/>
         : view === 'connectors' ? <ConnectedServices locale={locale} csrf={csrf} useInChat={!busy && !pending ? useConnectionResult : undefined}/>
-        : view === 'tools' ? <StudioTools locale={locale}/>
+        : view === 'projects' ? pageProject
+          ? <ProjectFolder key={pageProject.id} locale={locale} project={pageProject} conversations={currentProjectChats} busy={busy} openChat={open}
+            newChat={() => fresh(pageProject.id)} edit={() => setDialog({kind: 'project', project: pageProject})} back={() => navigate('projects')}
+            retry={() => {setProjectChats({id: pageProject.id, chats: {status: 'loading'}}); setProjectChatsRefresh(version => version + 1);}}/>
+          : <ProjectsHome locale={locale} projects={projects} busy={busy} missing={Boolean(projectPageId)}
+            create={() => setDialog({kind: 'project', project: null})} open={project => navigate('projects', project.id)}
+            retry={() => {setProjects({status: 'loading'}); setProjectRefresh(version => version + 1);}}/>
         : view !== 'chat' ? <ModelCatalog key={view} locale={locale} models={models} view={view} busy={busy} rate={rate}
           choose={id => { fresh(); setModel(id); }}/>
         : <>
@@ -488,9 +600,9 @@ export function App() {
             stickToBottom.current=panel.scrollHeight-panel.scrollTop-panel.clientHeight<120;
           }}>
             {messages.length === 0 ? <div className="welcome">
-              <span className="welcome-icon"><img src="/servernet.svg" alt=""/></span>
-              <h1>{t.title}</h1>
-              <p>{t.subtitle}</p>
+              <span className="welcome-icon">{chatProject ? <FolderOpen size={28} aria-hidden="true"/> : <img src="/servernet.svg" alt=""/>}</span>
+              <h1 dir="auto">{chatProject?.name ?? t.title}</h1>
+              <p>{chatProject ? p.projectEmpty : t.subtitle}</p>
               <div className="suggestions">
                 {[MessageSquare, Code2, Lightbulb].map((Icon, index) => <button type="button" key={index}
                   onClick={() => { setText(t.prompts[index]); input.current?.focus(); }} disabled={!model}>
@@ -507,7 +619,7 @@ export function App() {
                   <div>
                     {!working && <b>{message.role === 'assistant' ? t.assistant : t.you}</b>}
                     {message.image&&<img className="sent-image" src={message.image} alt={f.draftImage}/>}
-                    {media ? <MediaResult job={media} locale={locale} amount={amount} refresh={()=>{void checkMedia(media.id);}}/> :
+                    {media ? <MediaResult job={media} locale={locale} refresh={()=>{void checkMedia(media.id);}}/> :
                       waiting ? <Thinking text={f.thinking}/> : <div className="message-content" dir="auto">{message.content}</div>}
                   </div>
                 </article>;
@@ -519,7 +631,8 @@ export function App() {
               {pending ? t.unknown : error} <a href={consoleUrl('account/ai')} target="_blank" rel="noopener noreferrer">{t.console} ↗</a>
             </div>}
             {!model && <div className="notice">{t.noModels}</div>}
-            {charge !== null && <div className="charge">{t.charged} · {amount(charge)??f.unavailable}</div>}
+            {(!chatProjectId || chatProject) && <ChatContext locale={locale} project={chatProject} historyTurns={historyTurns} working={busy}
+              open={() => navigate('projects', chatProjectId)} edit={() => setDialog(chatProject ? {kind: 'project', project: chatProject} : {kind: 'history'})}/>}
             {currentModel&&currentModel.category!=='chat' ?
               <MediaComposer key={currentModel.id} model={currentModel} locale={locale} text={text} setText={setText}
                 amount={amount} quote={quoteMedia} generate={generateMedia} isSending={busy || pending || unresolvedMedia}/> :
@@ -544,6 +657,11 @@ export function App() {
         </>}
       {view !== 'chat' && error && <div className="workspace-error notice" role="alert">{error}</div>}
     </main>
+    {dialog?.kind === 'project' && <ProjectDialog locale={locale} project={dialog.project} save={saveProject} close={() => setDialog(null)}/>}
+    {dialog?.kind === 'history' && historyTurns !== null && <HistoryDialog locale={locale} historyTurns={historyTurns}
+      save={saveHistory} close={() => setDialog(null)}/>}
+    {dialog?.kind === 'usage' && account && <UsageDialog locale={locale} usage={account.ai} spend={amount(account.ai.spent_month)}
+      dashboard={consoleUrl('account/ai')} close={() => setDialog(null)}/>}
   </div>;
 }
 

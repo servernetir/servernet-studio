@@ -16,9 +16,9 @@ from fastapi import HTTPException, Request
 from fastapi.responses import RedirectResponse
 
 from .app import digest
-from .connectors import MAX_CONNECTORS
 
-SCOPE = 'https://www.googleapis.com/auth/gmail.metadata'
+SCOPE = 'https://www.googleapis.com/auth/gmail.labels'
+PREVIOUS_SCOPE = 'https://www.googleapis.com/auth/gmail.metadata'
 AUTHORIZE = 'https://accounts.google.com/o/oauth2/v2/auth'
 TOKEN = 'https://oauth2.googleapis.com/token'
 REVOKE = 'https://oauth2.googleapis.com/revoke'
@@ -71,8 +71,10 @@ class GmailConnector:
             if not isinstance(result, dict) or result.get('token_type', '').lower() != 'bearer':
                 raise ValueError
             # Google reports the scope on authorization. A refresh may omit it.
-            scope = result.get('scope', SCOPE if grant['grant_type'] == 'refresh_token' else '')
-            if not isinstance(scope, str) or set(scope.split()) != {SCOPE}:
+            refreshing = grant['grant_type'] == 'refresh_token'
+            scope = result.get('scope', SCOPE if refreshing else '')
+            allowed = (SCOPE, PREVIOUS_SCOPE) if refreshing else (SCOPE,)
+            if not isinstance(scope, str) or len(scope.split()) != 1 or scope.strip() not in allowed:
                 raise ValueError
             access = result['access_token']
             if not isinstance(access, str) or not re.fullmatch(r'[A-Za-z0-9._~+/=-]{1,8192}', access):
@@ -112,10 +114,7 @@ def install_gmail(app, settings, store, vault, client, authenticated):
     @app.post('/api/connectors/gmail/start')
     async def gmail_start(request: Request):
         row = authenticated(request, True)
-        connections = vault.list(row['subject'])
-        if len(connections) >= MAX_CONNECTORS:
-            raise HTTPException(409, 'Connection limit reached.')
-        if any(connection['kind'] == 'gmail' for connection in connections):
+        if vault.has_kind(row['subject'], 'gmail'):
             raise HTTPException(409, 'Disconnect the current Gmail account before connecting another.')
         return {'authorization_url': gmail.begin(row)}
 
