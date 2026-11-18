@@ -1,0 +1,91 @@
+/* SPDX-License-Identifier: AGPL-3.0-only */
+@font-face {
+  font-family: Vazirmatn;
+  src: url('vazirmatn-arabic.woff2') format('woff2');
+  font-weight: 100 900;
+  font-display: swap;
+}
+
+:root {
+  color-scheme: dark;
+  --surface: #101b30;
+  --line: #314460;
+  --ink: #eef5ff;
+  --subtle: #b4c3dc;
+  --code: #a4dcff;
+  --code-bg: #182b46;
+  --button-hover: #233652;
+  font-family: 'Segoe UI Variable Text', 'Segoe UI', system-ui, sans-serif;
+  font-synthesis: none;
+}
+:root[lang=fa] { font-family: Vazirmatn, 'Segoe UI', system-ui, sans-serif; }
+:root[data-theme=light] {
+  color-scheme: light;
+  --surface: #f7faff;
+  --line: #cddbef;
+  --ink: #122743;
+  --subtle: #4c6080;
+  --code: #17558f;
+  --code-bg: #eaf3ff;
+  --button-hover: #e7effb;
+}
+* { box-sizing: border-box; }
+body {
+  margin: 0;
+  min-height: 100vh;
+  background: var(--surface);
+  color: var(--ink);
+}
+main { min-height: 100vh; display: flex; flex-direction: column; padding: 25px 28px 24px; }
+.brand {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  color: var(--subtle);
+  font-size: 13px;
+  font-weight: 600;
+  -webkit-app-region: drag;
+}
+.brand img { width: 32px; height: 32px; }
+h1 { margin: 20px 0 5px; font-size: 25px; font-weight: 700; line-height: 1.35; }
+p { font-size: 13px; line-height: 1.65; margin: 0; color: var(--subtle); }
+.code-panel {
+  display: grid;
+  justify-items: center;
+  gap: 6px;
+  margin: 19px 0 10px;
+  padding: 12px 16px;
+  border: 1px solid var(--line);
+  border-radius: 13px;
+  background: var(--code-bg);
+}
+.code-panel span { font-size: 12px; color: var(--subtle); }
+.code-panel code {
+  color: var(--code);
+  font: 600 30px/1.2 'Cascadia Mono', Consolas, monospace;
+  letter-spacing: .13em;
+  user-select: all;
+}
+#hint { font-size: 12px; }
+footer {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+  margin-top: auto;
+  padding-top: 16px;
+}
+button {
+  min-height: 42px;
+  border: 1px solid transparent;
+  border-radius: 9px;
+  padding: 8px 14px;
+  font: inherit;
+  font-size: 13px;
+  font-weight: 650;
+  cursor: pointer;
+}
+button:focus-visible { outline: 2px solid #549aea; outline-offset: 3px; }
+.cancel { color: var(--ink); border-color: var(--line); background: transparent; }
+.cancel:hover { background: var(--button-hover); }
+.continue { color: white; background: #215fc3; }
+.continue:hover { background: #1a51a9; }

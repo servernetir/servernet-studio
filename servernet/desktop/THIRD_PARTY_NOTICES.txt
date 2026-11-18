@@ -5,5 +5,7 @@ SPDX-License-Identifier: AGPL-3.0-only
 This desktop client uses Electron, electron-updater and their dependencies.
 Their licenses and notices are included by the packaging tools in the application.
 The online Studio service retains its own third-party license notices at /legal.
+The connection dialog includes the Arabic subset of Vazirmatn from
+@fontsource-variable/vazirmatn 5.3.0. See src/OFL-Vazirmatn.txt for its license.
 Corresponding source: https://github.com/servernetir/servernet-studio
 ServerNet modifications are in the servernet/ directory. See servernet/desktop/LICENSE (AGPL-3.0-only). The upstream engine retains its separate root Apache-2.0 license.

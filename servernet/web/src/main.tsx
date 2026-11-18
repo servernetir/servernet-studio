@@ -1,133 +1,395 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 // Copyright 2026 ServerNet contributors
-import React, {useEffect, useLayoutEffect, useRef, useState} from 'react';
+import {useEffect, useLayoutEffect, useRef, useState} from 'react';
 import {createRoot} from 'react-dom/client';
-import {ArrowUp, ArrowUpRight, Wallet, Plus, MessageSquare, LogOut, Sparkles, Code2, Lightbulb, RefreshCw, Menu, X, ShieldCheck, Sun, Moon} from 'lucide-react';
-import {copy, type Locale} from './copy';
+import {ArrowUp, ArrowUpRight, Code2, Lightbulb, Menu, MessageSquare, Moon, PanelLeftClose, PanelLeftOpen, ShieldCheck, Sparkles, Sun, Wallet} from 'lucide-react';
+import {copy, workspaceCopy, type Locale} from './copy';
+import {readModels, type Model} from './catalog';
+import {ConversationLibrary, ModelCatalog, WorkspaceSidebar, localizedUrl, viewFromHash, type Account, type Chat, type View} from './workspace';
 import './style.css';
+import './workspace.css';
 
-type Chat = {id:string,title:string};
-type Message = {role:string,content:string};
-type Account = {customer:{name:string},wallet:{currency:string,unit:string,available:number,reserved:number},ai:{spent_month:number,prompt_tokens_month:number,completion_tokens_month:number}};
+type Message = {role: string; content: string};
+type Theme = 'light' | 'dark';
 const LANGUAGE_KEY = 'servernet.studio.language';
 const THEME_KEY = 'servernet.studio.theme';
 
 function readPreference(key: string) {
- try { return localStorage.getItem(key); } catch { return null; }
+  try { return localStorage.getItem(key); } catch { return null; }
 }
 
 function savePreference(key: string, value: string) {
- try { localStorage.setItem(key, value); } catch { /* The choice still applies until this page closes. */ }
+  try { localStorage.setItem(key, value); } catch { /* The choice still applies until this page closes. */ }
 }
 
-class ApiError extends Error {constructor(public status:number){super('ServerNet request failed');}}
-export function App(){
- const [locale,setLocale]=useState<Locale>(()=>{
-  const saved=readPreference(LANGUAGE_KEY);
-  return saved==='fa'||saved==='tr'?saved:'en';
- });
- const [theme,setTheme]=useState(()=>(readPreference(THEME_KEY)==='light'?'light':'dark'));
- const t=copy[locale], rtl=locale==='fa';
- const [ready,setReady]=useState(false),[signed,setSigned]=useState(false),[csrf,setCsrf]=useState('');
- const [account,setAccount]=useState<Account|null>(null),[models,setModels]=useState<string[]>([]),[model,setModel]=useState('');
- const [chats,setChats]=useState<Chat[]>([]),[active,setActive]=useState(''),[messages,setMessages]=useState<Message[]>([]);
- const [text,setText]=useState(''),[busy,setBusy]=useState(false),[error,setError]=useState(''),[pending,setPending]=useState(false),[charge,setCharge]=useState<number|null>(null),[mobile,setMobile]=useState(false);
- const bottom=useRef<HTMLDivElement>(null),input=useRef<HTMLTextAreaElement>(null);
- const requestVersion=useRef(0);
- const fmt=(n:number)=>new Intl.NumberFormat(locale==='fa'?'fa-IR':locale==='tr'?'tr-TR':'en-US').format(n);
- const consolePath=(path:string)=>`https://console.servernet.cloud/${locale==='fa'?'':locale+'/'}${path}`;
- useLayoutEffect(()=>{
-  document.documentElement.lang=locale;
-  document.documentElement.dir=rtl?'rtl':'ltr';
-  document.documentElement.dataset.signInTheme=theme;
- },[locale,rtl,theme]);
- async function api(path:string, init:RequestInit={}){
-  const r=await fetch(path,{...init,headers:{'Content-Type':'application/json',...(init.method==='POST'?{'X-CSRF-Token':csrf}:{}),...init.headers}});
-  if(!r.ok)throw new ApiError(r.status); return r;
- }
- function fail(e:unknown){setError(e instanceof ApiError&&e.status===402?t.balanceLow:e instanceof ApiError&&e.status===401?t.loginExpired:t.error);}
- async function refresh(){try{const a=await (await api('/api/account')).json();setAccount(a);}catch(e){fail(e);}}
- useEffect(()=>{let live=true;(async()=>{try{
-  const r=await fetch('/api/session');if(r.status===401)return;if(!r.ok)throw new ApiError(r.status);const s=await r.json();
-  const responses=await Promise.all(['/api/account','/api/models','/api/conversations'].map(p=>fetch(p)));
-  if(responses.some(r=>!r.ok))throw new ApiError(responses.find(r=>!r.ok)!.status);
-  const [a,m,c]=await Promise.all(responses.map(r=>r.json()));if(!live)return;
-  setCsrf(s.csrf);setSigned(true);setAccount(a);setModels(m.data.map((x:{id:string})=>x.id));setModel(m.data[0]?.id??'');setChats(c);
- }catch(e){if(live)fail(e);}finally{if(live)setReady(true);}})();return()=>{live=false};},[]);
- useEffect(()=>{bottom.current?.scrollIntoView({behavior:'smooth'});},[messages]);
- async function open(c:Chat){if(busy)return;const version=++requestVersion.current;setError('');try{const d=await(await api('/api/conversations/'+c.id)).json();if(version!==requestVersion.current)return;setActive(c.id);setMessages(d.messages);setPending(Boolean(d.pending));setCharge(null);setMobile(false);}catch(e){fail(e);}}
- function fresh(){if(busy)return;++requestVersion.current;setActive('');setMessages([]);setPending(false);setError('');setCharge(null);setText('');setMobile(false);input.current?.focus();}
- async function send(){
-  if(busy||pending||!model||!text.trim())return;
-  const message=text.trim();setError('');setBusy(true);setCharge(null);setText('');
-  let id=active,received='',finished=false;
-  try{
-   if(!id){const c=await(await api('/api/conversations',{method:'POST'})).json();id=c.id;setActive(id);setChats(p=>[c,...p]);}
-   const previous=[...messages,{role:'user',content:message}];setMessages([...previous,{role:'assistant',content:''}]);
-   const requestId=crypto.randomUUID().replaceAll('-','');
-   const response=await api('/api/chat',{method:'POST',body:JSON.stringify({conversation_id:id,request_id:requestId,model,message})});
-   const reader=response.body!.getReader(), decoder=new TextDecoder();let buffer='';
-   while(true){const r=await reader.read();buffer+=decoder.decode(r.value,{stream:!r.done});let boundary:number;
-    while((boundary=buffer.indexOf('\n\n'))!==-1){const block=buffer.slice(0,boundary);buffer=buffer.slice(boundary+2);const name=block.split('\n').find(l=>l.startsWith('event:'))?.slice(6).trim();const raw=block.split('\n').filter(l=>l.startsWith('data:')).map(l=>l.slice(5).trim()).join('\n');if(!raw)continue;const value=JSON.parse(raw);
-     if(name==='delta'){received+=value.text;setMessages([...previous,{role:'assistant',content:received}]);}
-     if(name==='done'){finished=true;setMessages([...previous,{role:'assistant',content:value.text}]);setCharge(value.charge_irt);}
-     if(name==='error')throw new Error('Unconfirmed request');
-    }
-    if(r.done)break;
-   }
-   if(!finished)throw new Error('Incomplete stream');
-   setChats(await(await api('/api/conversations')).json());await refresh();
-  }catch(e){fail(e);if(id){try{const d=await(await api('/api/conversations/'+id)).json();setPending(Boolean(d.pending));setMessages(d.messages);}catch{setPending(true);}}}
-  finally{setBusy(false);}
- }
- async function logout(){try{await api('/api/logout',{method:'POST'});setSigned(false);setAccount(null);setMessages([]);setChats([]);setCsrf('');setActive('');setError('');}catch(e){fail(e);}}
- const langs=<select className="language" aria-label="Language / زبان" value={locale} onChange={e=>{
-  const next=e.target.value as Locale;
-  setLocale(next);
-  savePreference(LANGUAGE_KEY,next);
- }}><option value="en">English</option><option value="fa">فارسی</option><option value="tr">Türkçe</option></select>;
- const brand=<div className="brand"><img src="/servernet.svg" alt=""/><div><b>ServerNet <span>Studio</span></b><small>{t.tagline}</small></div></div>;
- if(!ready)return <div className="loading"><img src="/servernet.svg" alt="ServerNet"/>{t.loading}</div>;
- if(!signed){
-  const nextTheme=theme==='dark'?'light':'dark';
-  return <main className="login-page">
-   <nav>
-    {brand}
-    <div className="login-settings">
-     {langs}
-     <button type="button" className="theme-toggle" onClick={()=>{
-      setTheme(nextTheme);
-      savePreference(THEME_KEY,nextTheme);
-     }}>
-      {nextTheme==='light'?<Sun size={16} aria-hidden="true"/>:<Moon size={16} aria-hidden="true"/>}
-      {nextTheme==='light'?t.lightMode:t.darkMode}
-     </button>
-    </div>
-   </nav>
-   <div className="login-grid">
-    <section className="login-copy">
-     <div className="eyebrow"><Sparkles size={15}/> SERVERNET AI</div>
-     <h1>{t.loginTitle}</h1>
-     <p>{t.loginSub}</p>
-     <div className="login-points"><span><ShieldCheck size={19}/>{t.central}</span><span><Wallet size={19}/>{t.foot}</span></div>
-    </section>
-    <section className="login-card">
-     <div className="logo-orbit"><img src="/servernet.svg" alt=""/></div>
-     <h2>ServerNet Studio</h2>
-     <p>{t.tagline}</p>
-     {error&&<div className="notice" role="alert">{error}</div>}
-     <a className="primary login-button" href={"/auth/start?lang="+locale}>{t.login}<ArrowUpRight size={18}/></a>
-     <a className="google-button" href={"/auth/start?method=google&lang="+locale}>{t.google}</a>
-     <a className="register" href={"/auth/start?method=register&lang="+locale}>{t.register}</a>
-    </section>
-   </div>
-   <footer><span>ServerNet Studio</span><a href="/legal">{t.legal}</a></footer>
-  </main>;
- }
- return <div className="workspace"><aside className={mobile?'sidebar open':'sidebar'}>{brand}<button className="mobile-close" onClick={()=>setMobile(false)} aria-label={t.close}><X/></button><button className="new-chat" onClick={fresh} disabled={busy}><Plus size={18}/>{t.new}</button><div className="nav-label">{t.chats}</div><div className="chat-list">{chats.length===0?<p className="empty-list">{t.empty}</p>:chats.map(c=><button key={c.id} className={c.id===active?'chat active':'chat'} onClick={()=>open(c)} disabled={busy}><MessageSquare size={15}/><span>{c.title==='New conversation'?t.new:c.title}</span></button>)}</div><div className="wallet-card"><div className="wallet-label"><Wallet size={16}/>{t.wallet}<button onClick={refresh} aria-label={t.retryAccount}><RefreshCw size={13}/></button></div><small>{t.available}</small><strong>{fmt(account?.wallet.available??0)} <span>{t.toman}</span></strong>{Boolean(account?.wallet.reserved)&&<small>{t.held}: {fmt(account!.wallet.reserved)} {t.toman}</small>}<a href={consolePath('account/topup')} target="_blank" rel="noopener noreferrer">{t.topup}<Plus size={15}/></a></div><a className="console-link" href={consolePath('account/ai')} target="_blank" rel="noopener noreferrer">{t.console}<ArrowUpRight size={16}/></a><div className="profile"><div className="avatar">{account?.customer.name.charAt(0)}</div><span>{account?.customer.name}</span><button onClick={logout} disabled={busy} aria-label={t.logout}><LogOut size={17}/></button></div><a className="legal-link" href="/legal">{t.legal}</a></aside>{mobile&&<button className="backdrop" aria-label={t.close} onClick={()=>setMobile(false)}/>}
- <main className="main-panel"><header><div className="model-selector"><button className="hamburger" onClick={()=>setMobile(true)} aria-label={t.menu}><Menu/></button><span className="model-dot"/><select aria-label={t.model} value={model} onChange={e=>setModel(e.target.value)} disabled={busy}>{models.length?models.map(m=><option key={m}>{m}</option>):<option>{t.noModels}</option>}</select></div><div className="header-right">{langs}<span className="usage"><span>{t.usage}</span><b>{fmt((account?.ai.prompt_tokens_month??0)+(account?.ai.completion_tokens_month??0))} {t.token}</b></span></div></header>
- <div className="conversation-body">{messages.length===0?<div className="welcome"><div className="eyebrow"><span/> SERVERNET INTELLIGENCE</div><h1>{t.title}</h1><p>{t.subtitle}</p><div className="suggestions">{[MessageSquare,Code2,Lightbulb].map((Icon,i)=><button key={i} onClick={()=>{setText(t.prompts[i]);input.current?.focus();}} disabled={!model}><Icon size={20}/><span>{t.ideas[i]}</span><ArrowUpRight size={15}/></button>)}</div><div className="welcome-note"><ShieldCheck size={15}/>{t.foot}</div></div>:<div className="messages">{messages.map((m,i)=><article key={i} className={'message '+m.role}><div className="message-avatar">{m.role==='assistant'?<img src="/servernet.svg" alt=""/>:account?.customer.name.charAt(0)}</div><div><b>{m.role==='assistant'?t.assistant:t.you}</b><div className="message-content" dir="auto">{m.content||t.writing}</div></div></article>)}<div ref={bottom}/></div>}</div>
- <div className="composer-area">{(error||pending)&&<div className="notice" role="alert">{pending?t.unknown:error} <a href={consolePath('account/ai')} target="_blank" rel="noopener noreferrer">{t.console} ↗</a></div>}{!model&&<div className="notice">{t.noModels}</div>}{charge!==null&&<div className="charge">{t.charged}: {fmt(charge)} {t.toman}</div>}<form className="composer" onSubmit={e=>{e.preventDefault();void send();}}><textarea ref={input} value={text} onChange={e=>setText(e.target.value)} placeholder={t.placeholder} maxLength={8000} rows={2} disabled={busy||pending||!model} onKeyDown={e=>{if(e.key==='Enter'&&!e.shiftKey&&!e.nativeEvent.isComposing){e.preventDefault();void send();}}}/><div className="composer-bottom"><span>ServerNet AI Gateway</span><button type="submit" className="send" aria-label={t.send} disabled={busy||pending||!model||!text.trim()}><ArrowUp size={20}/></button></div></form><p className="composer-foot">{t.foot}</p></div>
- </main></div>;
+class ApiError extends Error {
+  constructor(public status: number) { super('ServerNet request failed'); }
 }
+
+export function App() {
+  const [locale, setLocale] = useState<Locale>(() => {
+    const saved = readPreference(LANGUAGE_KEY);
+    return saved === 'fa' || saved === 'tr' ? saved : 'en';
+  });
+  const [theme, setTheme] = useState<Theme>(() => readPreference(THEME_KEY) === 'light' ? 'light' : 'dark');
+  const [view, setView] = useState(viewFromHash);
+  const [collapsed, setCollapsed] = useState(false);
+  const [mobile, setMobile] = useState(false);
+  const [ready, setReady] = useState(false);
+  const [signed, setSigned] = useState(false);
+  const [csrf, setCsrf] = useState('');
+  const [account, setAccount] = useState<Account | null>(null);
+  const [models, setModels] = useState<Model[]>([]);
+  const [model, setModel] = useState('');
+  const [chats, setChats] = useState<Chat[]>([]);
+  const [active, setActive] = useState('');
+  const [messages, setMessages] = useState<Message[]>([]);
+  const [text, setText] = useState('');
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState('');
+  const [pending, setPending] = useState(false);
+  const [charge, setCharge] = useState<number | null>(null);
+  const requestVersion = useRef(0);
+  const bottom = useRef<HTMLDivElement>(null);
+  const input = useRef<HTMLTextAreaElement>(null);
+
+  const t = copy[locale];
+  const w = workspaceCopy[locale];
+  const chatModels = models.filter(entry => entry.category === 'chat');
+  const number = (value: number) => new Intl.NumberFormat(locale).format(value);
+  const consoleUrl = (path: string) => localizedUrl('https://console.servernet.cloud', locale, path);
+  const nextTheme = theme === 'dark' ? 'light' : 'dark';
+  const ThemeIcon = nextTheme === 'light' ? Sun : Moon;
+  const themeLabel = nextTheme === 'light' ? t.lightMode : t.darkMode;
+
+  useLayoutEffect(() => {
+    document.documentElement.lang = locale;
+    document.documentElement.dir = locale === 'fa' ? 'rtl' : 'ltr';
+    document.documentElement.dataset.signInTheme = theme;
+  }, [locale, theme]);
+
+  useEffect(() => {
+    const update = () => {
+      setView(viewFromHash());
+      setMobile(false);
+    };
+    window.addEventListener('hashchange', update);
+    return () => window.removeEventListener('hashchange', update);
+  }, []);
+
+  useEffect(() => {
+    if (!mobile) return;
+    const cancel = (event: KeyboardEvent) => { if (event.key === 'Escape') setMobile(false); };
+    window.addEventListener('keydown', cancel);
+    return () => window.removeEventListener('keydown', cancel);
+  }, [mobile]);
+
+  useEffect(() => {
+    bottom.current?.scrollIntoView({behavior: 'smooth'});
+  }, [messages, view]);
+
+  async function api(path: string, init: RequestInit = {}) {
+    const response = await fetch(path, {
+      ...init,
+      headers: {'Content-Type': 'application/json', ...(init.method === 'POST' ? {'X-CSRF-Token': csrf} : {}), ...init.headers},
+    });
+    if (!response.ok) throw new ApiError(response.status);
+    return response;
+  }
+
+  function fail(failure: unknown) {
+    const status = failure instanceof ApiError ? failure.status : null;
+    setError(status === 402 ? t.balanceLow : status === 401 ? t.loginExpired : t.error);
+  }
+
+  async function refresh() {
+    try { setAccount(await (await api('/api/account')).json()); } catch (failure) { fail(failure); }
+  }
+
+  useEffect(() => {
+    let live = true;
+    async function initialize() {
+      try {
+        const response = await fetch('/api/session');
+        if (response.status === 401) return;
+        if (!response.ok) throw new ApiError(response.status);
+        const session = await response.json();
+        const [wallet, catalog, history] = await Promise.all(
+          ['/api/account', '/api/models?catalog=true', '/api/conversations'].map(async path => (await api(path)).json()),
+        );
+        if (!live) return;
+        const activeModels = readModels(catalog);
+        setCsrf(session.csrf);
+        setSigned(true);
+        setAccount(wallet);
+        setModels(activeModels);
+        setModel(activeModels.find(entry => entry.category === 'chat')?.id ?? '');
+        setChats(history);
+      } catch (failure) {
+        if (live) fail(failure);
+      } finally {
+        if (live) setReady(true);
+      }
+    }
+    void initialize();
+    return () => { live = false; };
+  }, []);
+
+  function navigate(target: View) {
+    setView(target);
+    setMobile(false);
+    if (location.hash.slice(1) !== target) location.hash = target;
+  }
+
+  function changeTheme() {
+    setTheme(nextTheme);
+    savePreference(THEME_KEY, nextTheme);
+  }
+
+  async function open(chat: Chat) {
+    if (busy) return;
+    const version = ++requestVersion.current;
+    setError('');
+    try {
+      const detail = await (await api('/api/conversations/' + chat.id)).json();
+      if (version !== requestVersion.current) return;
+      setActive(chat.id);
+      setMessages(detail.messages);
+      setPending(Boolean(detail.pending));
+      setCharge(null);
+      navigate('chat');
+    } catch (failure) {
+      if (version === requestVersion.current) fail(failure);
+    }
+  }
+
+  function fresh() {
+    if (busy) return;
+    ++requestVersion.current;
+    setActive('');
+    setMessages([]);
+    setPending(false);
+    setError('');
+    setCharge(null);
+    setText('');
+    navigate('chat');
+    input.current?.focus();
+  }
+
+  async function send() {
+    if (busy || pending || !model || !text.trim()) return;
+    ++requestVersion.current;
+    const message = text.trim();
+    setError('');
+    setBusy(true);
+    setCharge(null);
+    setText('');
+    let id = active;
+    let received = '';
+    let finished = false;
+    try {
+      if (!id) {
+        const chat = await (await api('/api/conversations', {method: 'POST'})).json();
+        id = chat.id;
+        setActive(id);
+        setChats(previous => [chat, ...previous]);
+      }
+      const previous = [...messages, {role: 'user', content: message}];
+      setMessages([...previous, {role: 'assistant', content: ''}]);
+      const requestId = crypto.randomUUID().replaceAll('-', '');
+      const response = await api('/api/chat', {
+        method: 'POST',
+        body: JSON.stringify({conversation_id: id, request_id: requestId, model, message}),
+      });
+      const reader = response.body!.getReader();
+      const decoder = new TextDecoder();
+      let buffer = '';
+      while (true) {
+        const chunk = await reader.read();
+        buffer += decoder.decode(chunk.value, {stream: !chunk.done});
+        let boundary: number;
+        while ((boundary = buffer.indexOf('\n\n')) !== -1) {
+          const lines = buffer.slice(0, boundary).split('\n');
+          buffer = buffer.slice(boundary + 2);
+          const name = lines.find(line => line.startsWith('event:'))?.slice(6).trim();
+          const raw = lines.filter(line => line.startsWith('data:')).map(line => line.slice(5).trim()).join('\n');
+          if (!raw) continue;
+          const value = JSON.parse(raw);
+          if (name === 'delta') {
+            received += value.text;
+            setMessages([...previous, {role: 'assistant', content: received}]);
+          }
+          if (name === 'done') {
+            finished = true;
+            setMessages([...previous, {role: 'assistant', content: value.text}]);
+            setCharge(value.charge_irt);
+          }
+          if (name === 'error') throw new Error('Unconfirmed request');
+        }
+        if (chunk.done) break;
+      }
+      if (!finished) throw new Error('Incomplete stream');
+      setChats(await (await api('/api/conversations')).json());
+      await refresh();
+    } catch (failure) {
+      fail(failure);
+      if (id) {
+        try {
+          const detail = await (await api('/api/conversations/' + id)).json();
+          setPending(Boolean(detail.pending));
+          setMessages(detail.messages);
+        } catch {
+          setPending(true);
+        }
+      }
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function logout() {
+    try {
+      await api('/api/logout', {method: 'POST'});
+      ++requestVersion.current;
+      setSigned(false);
+      setAccount(null);
+      setMessages([]);
+      setChats([]);
+      setCsrf('');
+      setActive('');
+      setError('');
+      setText('');
+      setPending(false);
+      setCharge(null);
+      navigate('chat');
+    } catch (failure) {
+      fail(failure);
+    }
+  }
+
+  const languages = <select className="language" aria-label="Language / زبان" value={locale} onChange={event => {
+    const next = event.target.value as Locale;
+    setLocale(next);
+    savePreference(LANGUAGE_KEY, next);
+  }}>
+    <option value="en">English</option><option value="fa">فارسی</option><option value="tr">Türkçe</option>
+  </select>;
+  const brand = <div className="brand"><img src="/servernet.svg" alt=""/><div>
+    <b>ServerNet <span>Studio</span></b>{!signed && <small>{t.tagline}</small>}
+  </div></div>;
+
+  if (!ready) return <div className="loading"><img src="/servernet.svg" alt="ServerNet"/>{t.loading}</div>;
+  if (!signed) {
+    const loginUrl = (method: string) => '/auth/start?' + new URLSearchParams({lang: locale, method, theme});
+    return <main className="login-page">
+      <nav>
+        {brand}
+        <div className="login-settings">
+          {languages}
+          <button type="button" className="theme-toggle" onClick={changeTheme}><ThemeIcon size={16} aria-hidden="true"/>{themeLabel}</button>
+        </div>
+      </nav>
+      <div className="login-grid">
+        <section className="login-copy">
+          <div className="eyebrow"><Sparkles size={15}/> SERVERNET AI</div>
+          <h1>{t.loginTitle}</h1>
+          <p>{t.loginSub}</p>
+          <div className="login-points"><span><ShieldCheck size={19}/>{t.central}</span><span><Wallet size={19}/>{t.foot}</span></div>
+        </section>
+        <section className="login-card">
+          <div className="logo-orbit"><img src="/servernet.svg" alt=""/></div>
+          <h2>ServerNet Studio</h2>
+          <p>{t.tagline}</p>
+          {error && <div className="notice" role="alert">{error}</div>}
+          <a className="primary login-button" href={loginUrl('account')}>{t.login}<ArrowUpRight size={18}/></a>
+          <a className="google-button" href={loginUrl('google')}>{t.google}</a>
+          <a className="register" href={loginUrl('register')}>{t.register}</a>
+        </section>
+      </div>
+      <footer><span>ServerNet Studio</span><a href="/legal">{t.legal}</a></footer>
+    </main>;
+  }
+
+  const sidebarLabel = collapsed ? w.expand : w.collapse;
+  const SidebarIcon = collapsed ? PanelLeftOpen : PanelLeftClose;
+  const displayedView = view === 'models' ? w.catalog : view === 'library' ? w.history : w[view];
+  return <div className="workspace">
+    <WorkspaceSidebar brand={brand} locale={locale} view={view} open={mobile} collapsed={collapsed} chats={chats}
+      active={active} account={account} busy={busy} number={number} close={() => setMobile(false)} navigate={navigate}
+      fresh={fresh} openChat={open} refreshBalance={refresh} logout={logout}/>
+    {mobile && <button type="button" className="backdrop" aria-label={t.close} onClick={() => setMobile(false)}/>}
+    <main className="main-panel">
+      <header className="workspace-header">
+        <div className="workspace-header-left">
+          <button type="button" className="desktop-toggle icon-button" aria-controls="studio-sidebar" aria-expanded={!collapsed}
+            aria-label={sidebarLabel} title={sidebarLabel} onClick={() => setCollapsed(!collapsed)}><SidebarIcon size={19}/></button>
+          <button type="button" className="mobile-toggle icon-button" aria-controls="studio-sidebar" aria-expanded={mobile}
+            aria-label={w.expand} onClick={() => setMobile(true)}><Menu size={21}/></button>
+          {view === 'chat'
+            ? <div className="model-selector">
+              <span className="model-dot" aria-hidden="true"/>
+              <select aria-label={t.model} value={model} onChange={event => setModel(event.target.value)} disabled={busy || !chatModels.length}>
+                {chatModels.length ? chatModels.map(entry => <option key={entry.id} value={entry.id}>{entry.label}</option>) : <option value="">{t.noModels}</option>}
+              </select>
+            </div>
+            : <span className="header-location">{displayedView}</span>}
+        </div>
+        <div className="workspace-header-right">
+          {languages}
+          <button type="button" className="icon-button" onClick={changeTheme} aria-label={themeLabel} title={themeLabel}><ThemeIcon size={18}/></button>
+          <span className="usage" title={t.usage}>{number((account?.ai.prompt_tokens_month ?? 0) + (account?.ai.completion_tokens_month ?? 0))} {t.token}</span>
+        </div>
+      </header>
+      {view === 'library' ? <ConversationLibrary locale={locale} chats={chats} busy={busy} open={open}/>
+        : view !== 'chat' ? <ModelCatalog key={view} locale={locale} models={models} view={view} busy={busy} number={number}
+          choose={id => { setModel(id); navigate('chat'); }}/>
+        : <>
+          <div className="conversation-body">
+            {messages.length === 0 ? <div className="welcome">
+              <span className="welcome-icon"><img src="/servernet.svg" alt=""/></span>
+              <h1>{t.title}</h1>
+              <p>{t.subtitle}</p>
+              <div className="suggestions">
+                {[MessageSquare, Code2, Lightbulb].map((Icon, index) => <button type="button" key={index}
+                  onClick={() => { setText(t.prompts[index]); input.current?.focus(); }} disabled={!model}>
+                  <Icon size={18}/><span>{t.ideas[index]}</span><ArrowUpRight size={15}/>
+                </button>)}
+              </div>
+            </div> : <div className="messages">
+              {messages.map((message, index) => <article key={index} className={'message ' + message.role}>
+                <div className="message-avatar">{message.role === 'assistant' ? <img src="/servernet.svg" alt=""/> : account?.customer.name.charAt(0)}</div>
+                <div>
+                  <b>{message.role === 'assistant' ? t.assistant : t.you}</b>
+                  <div className="message-content" dir="auto">{message.content || t.writing}</div>
+                </div>
+              </article>)}
+              <div ref={bottom}/>
+            </div>}
+          </div>
+          <div className="composer-area">
+            {(error || pending) && <div className="notice" role="alert">
+              {pending ? t.unknown : error} <a href={consoleUrl('account/ai')} target="_blank" rel="noopener noreferrer">{t.console} ↗</a>
+            </div>}
+            {!model && <div className="notice">{t.noModels}</div>}
+            {charge !== null && <div className="charge">{t.charged} · {number(charge)} {t.toman}</div>}
+            <form className="composer" onSubmit={event => { event.preventDefault(); void send(); }}>
+              <textarea ref={input} value={text} onChange={event => setText(event.target.value)} placeholder={t.placeholder} aria-label={t.placeholder}
+                maxLength={8000} rows={2} disabled={busy || pending || !model} onKeyDown={event => {
+                  if (event.key === 'Enter' && !event.shiftKey && !event.nativeEvent.isComposing) {
+                    event.preventDefault();
+                    void send();
+                  }
+                }}/>
+              <div className="composer-bottom">
+                <button type="submit" className="send" aria-label={t.send} disabled={busy || pending || !model || !text.trim()}><ArrowUp size={20}/></button>
+              </div>
+            </form>
+            <p className="composer-foot">{t.foot}</p>
+          </div>
+        </>}
+      {view !== 'chat' && error && <div className="workspace-error notice" role="alert">{error}</div>}
+    </main>
+  </div>;
+}
+
 createRoot(document.getElementById('root')!).render(<App/>);

@@ -35,3 +35,45 @@ export const copy = {
   }
 };
 export type Locale = keyof typeof copy;
+
+export const workspaceCopy = {
+  en: {
+    navigation: 'Workspace navigation', collapse: 'Collapse sidebar', expand: 'Open sidebar',
+    chat: 'Chat', catalog: 'Model hub', history: 'Conversation library', recent: 'Recent conversations',
+    media: 'Media models', image: 'Images', video: 'Video', audio: 'Audio', music: 'Music',
+    api: 'AI API & keys', apiDocs: 'API guide', browseCatalog: 'Open Gateway catalog',
+    catalogDescription: 'Find an active model for your work.',
+    mediaDescription: 'Use these models through the ServerNet AI Gateway API.',
+    searchModels: 'Search models', searchChats: 'Search conversations',
+    noResults: 'No matches found.', noCategoryModels: 'There are no active models in this category.',
+    historyDescription: 'Search your conversations or save a text copy.',
+    openChat: 'Open conversation', saveChat: 'Save as text', useModel: 'Use in chat',
+    apiModel: 'Gateway API', context: 'context tokens', modelId: 'API model ID',
+  },
+  fa: {
+    navigation: 'ناوبری فضای کار', collapse: 'جمع کردن نوار کناری', expand: 'باز کردن نوار کناری',
+    chat: 'گفتگو', catalog: 'مرکز مدل‌ها', history: 'کتابخانهٔ گفتگوها', recent: 'گفتگوهای اخیر',
+    media: 'مدل‌های رسانه‌ای', image: 'تصویر', video: 'ویدئو', audio: 'صدا', music: 'موسیقی',
+    api: 'API و کلیدها', apiDocs: 'راهنمای API', browseCatalog: 'باز کردن کاتالوگ سرورنت',
+    catalogDescription: 'مدل فعال مناسب کارتان را پیدا کنید.',
+    mediaDescription: 'این مدل‌ها از طریق API هوش مصنوعی سرورنت قابل استفاده‌اند.',
+    searchModels: 'جستجو در مدل‌ها', searchChats: 'جستجو در گفتگوها',
+    noResults: 'نتیجه‌ای پیدا نشد.', noCategoryModels: 'در این دسته مدل فعالی وجود ندارد.',
+    historyDescription: 'گفتگوهایتان را پیدا کنید یا یک نسخهٔ متنی ذخیره کنید.',
+    openChat: 'باز کردن گفتگو', saveChat: 'ذخیرهٔ متن', useModel: 'استفاده در گفتگو',
+    apiModel: 'API سرورنت', context: 'توکن زمینه', modelId: 'شناسهٔ مدل برای API',
+  },
+  tr: {
+    navigation: 'Çalışma alanı gezinmesi', collapse: 'Kenar çubuğunu daralt', expand: 'Kenar çubuğunu aç',
+    chat: 'Sohbet', catalog: 'Model merkezi', history: 'Sohbet kütüphanesi', recent: 'Son sohbetler',
+    media: 'Medya modelleri', image: 'Görsel', video: 'Video', audio: 'Ses', music: 'Müzik',
+    api: 'AI API ve anahtarlar', apiDocs: 'API kılavuzu', browseCatalog: 'Gateway kataloğunu aç',
+    catalogDescription: 'İşiniz için etkin bir model bulun.',
+    mediaDescription: 'Bu modelleri ServerNet AI Gateway API ile kullanın.',
+    searchModels: 'Model ara', searchChats: 'Sohbet ara',
+    noResults: 'Sonuç bulunamadı.', noCategoryModels: 'Bu kategoride etkin model yok.',
+    historyDescription: 'Sohbetlerinizi arayın veya metin olarak kaydedin.',
+    openChat: 'Sohbeti aç', saveChat: 'Metin olarak kaydet', useModel: 'Sohbette kullan',
+    apiModel: 'Gateway API', context: 'bağlam tokenı', modelId: 'API model kimliği',
+  },
+};

@@ -163,6 +163,10 @@ def test_account_wallet_and_model_filter_are_server_owned(setup):
     account = browser.get('/api/account').json()
     assert account['wallet'] == {'currency':'IRT','unit':'toman','balance':900,'reserved':100,'available':800}
     assert browser.get('/api/models').json() == {'data':[{'id':'sn-chat','context_length':None}]}
+    assert browser.get('/api/models?catalog=true').json() == {'data': [
+        {'id': 'sn-chat', 'context_length': None, 'category': 'chat'},
+        {'id': 'video', 'context_length': None, 'category': 'video'},
+    ]}
     assert 'fake-servernet-key' not in browser.get('/api/session').text
 
 
@@ -171,6 +175,20 @@ def test_history_isolated_between_customers(setup):
     login(setup, 'customer-2')
     assert setup[1].get('/api/conversations').json() == []
     assert setup[1].get('/api/conversations/'+body['conversation_id']).status_code == 404
+    assert setup[1].get('/api/conversations/'+body['conversation_id']+'/export').status_code == 404
+
+
+def test_export_returns_owned_conversation_as_plain_text(setup):
+    headers, body = new_chat(setup)
+    browser = setup[1]
+    assert browser.post('/api/chat', headers=headers, json=body).status_code == 200
+    identifier = body['conversation_id']
+    exported = browser.get(f'/api/conversations/{identifier}/export')
+    assert exported.status_code == 200
+    assert exported.headers['content-type'] == 'text/plain; charset=utf-8'
+    assert exported.headers['content-disposition'] == f'attachment; filename="servernet-conversation-{identifier}.txt"'
+    assert body['message'] in exported.text
+    assert 'پاسخ آزمایشی' in exported.text
 
 
 def test_gateway_stream_billing_history_and_same_request_replay(setup):

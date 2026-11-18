@@ -1,19 +1,37 @@
 // SPDX-License-Identifier: AGPL-3.0-only
-import {app, BrowserWindow, Menu, dialog, shell, net, clipboard} from 'electron';
+import {app, BrowserWindow, Menu, dialog, shell, net} from 'electron';
 import {fileURLToPath} from 'node:url';
 import {setTimeout as sleep} from 'node:timers/promises';
 import updater from 'electron-updater';
-import {ORIGIN, UPDATE_FEED, DOWNLOADS, signinOptions, internal, external} from './policy.mjs';
+import {ORIGIN, UPDATE_FEED, DOWNLOADS, signinOptions, internal, external, conversationExport} from './policy.mjs';
 import {signIn} from './signin.mjs';
+import {confirmConnection} from './connection-dialog.mjs';
 
 app.setName('ServerNet Studio');
 if (!app.requestSingleInstanceLock()) app.quit();
 let window, login, updating = false;
 const offline = fileURLToPath(new URL('./offline.html', import.meta.url));
 const ownPage = () => window && (internal(window.webContents.getURL()) || window.webContents.getURL() === new URL('./offline.html', import.meta.url).href);
-const labels = {fa:['اتصال سرورنت','کد اتصال برنامه','کد زیر را کپی کنید و در صفحهٔ مرورگر وارد کنید. فقط اتصال همین برنامه را تأیید کنید.','کپی کد و ادامه','انصراف','اتصال ممکن نشد. اینترنت و وضعیت سرویس را بررسی کنید.','بررسی نسخهٔ جدید','اتصال دوباره','دریافت نسخهٔ جدید','نسخهٔ جدید آماده است. دانلود شود؟','نسخهٔ شما به‌روز است.','دانلود تمام شد. برنامه برای نصب نسخهٔ جدید بسته شود؟'],
- en:['ServerNet connection','Desktop connection code','Copy this code and enter it in the browser. Approve only this desktop app.','Copy code and continue','Cancel','Unable to connect. Check your connection and service status.','Check for updates','Reconnect','New version','Download the new version?','You are up to date.','Download finished. Close the app and install the update?'],
- tr:['ServerNet bağlantısı','Uygulama bağlantı kodu','Bu kodu kopyalayıp tarayıcıya girin. Yalnızca bu uygulamayı onaylayın.','Kopyala ve devam et','İptal','Bağlantı kurulamadı. Bağlantınızı ve hizmet durumunu kontrol edin.','Güncellemeleri denetle','Yeniden bağlan','Yeni sürüm','Yeni sürüm indirilsin mi?','Uygulamanız güncel.','İndirme tamamlandı. Güncellemek için uygulama kapatılsın mı?']};
+const labels = {
+  fa: {
+    connection: 'اتصال سرورنت', failed: 'اتصال ممکن نشد. اینترنت و وضعیت سرویس را بررسی کنید.',
+    continue: 'ادامه', cancel: 'انصراف', update: 'بررسی نسخهٔ جدید', reconnect: 'اتصال دوباره',
+    newVersion: 'دریافت نسخهٔ جدید', download: 'نسخهٔ جدید آماده است. دانلود شود؟',
+    current: 'نسخهٔ شما به‌روز است.', install: 'دانلود تمام شد. برنامه برای نصب نسخهٔ جدید بسته شود؟',
+  },
+  en: {
+    connection: 'ServerNet connection', failed: 'Unable to connect. Check your connection and service status.',
+    continue: 'Continue', cancel: 'Cancel', update: 'Check for updates', reconnect: 'Reconnect',
+    newVersion: 'New version', download: 'Download the new version?',
+    current: 'You are up to date.', install: 'Download finished. Close the app and install the update?',
+  },
+  tr: {
+    connection: 'ServerNet bağlantısı', failed: 'Bağlantı kurulamadı. Bağlantınızı ve hizmet durumunu kontrol edin.',
+    continue: 'Devam et', cancel: 'İptal', update: 'Güncellemeleri denetle', reconnect: 'Yeniden bağlan',
+    newVersion: 'Yeni sürüm', download: 'Yeni sürüm indirilsin mi?',
+    current: 'Uygulamanız güncel.', install: 'İndirme tamamlandı. Güncellemek için uygulama kapatılsın mı?',
+  },
+};
 const words = (lang) => labels[lang] || labels.en;
 const locale = () => app.getLocale().split('-')[0];
 
@@ -34,11 +52,10 @@ async function startLogin(options) {
   login = new AbortController(); const controller = login, t = words(options.lang);
   try { await signIn(options, {
     post, now:Date.now, sleep:(ms,signal)=>sleep(ms,undefined,{signal}),
-    confirmCode:async(code)=>{ const result=await dialog.showMessageBox(window,{type:'info',title:t[1],message:code,detail:t[2],buttons:[t[3],t[4]],defaultId:0,cancelId:1});
-      if(result.response!==0) return false; clipboard.writeText(code); return true; },
+    confirmCode:code=>confirmConnection(window, code, options, controller.signal),
     open:(value)=>shell.openExternal(value), setCookie:(cookie)=>window.webContents.session.cookies.set(cookie),
     complete:async(value)=>{await window.webContents.session.cookies.flushStore(); await window.loadURL(value); window.show(); window.focus();},
-  }, controller.signal); } catch { if(!controller.signal.aborted && window && !window.isDestroyed()) await dialog.showMessageBox(window,{type:'error',title:t[0],message:t[5]}); }
+  }, controller.signal); } catch { if(!controller.signal.aborted && window && !window.isDestroyed()) await dialog.showMessageBox(window,{type:'error',title:t.connection,message:t.failed}); }
   finally { if(login === controller) login = null; }
 }
 async function checkUpdates() {
@@ -46,17 +63,17 @@ async function checkUpdates() {
   updating=true; const t=words(locale());
   try {
     const result=await updater.autoUpdater.checkForUpdates();
-    if(!result || result.updateInfo.version === app.getVersion()) { await dialog.showMessageBox(window,{message:t[10]}); return; }
-    const answer=await dialog.showMessageBox(window,{message:t[8],detail:t[9],buttons:[t[3],t[4]],cancelId:1});
+    if(!result || result.updateInfo.version === app.getVersion()) { await dialog.showMessageBox(window,{message:t.current}); return; }
+    const answer=await dialog.showMessageBox(window,{message:t.newVersion,detail:t.download,buttons:[t.continue,t.cancel],cancelId:1});
     if(answer.response!==0) return;
     await updater.autoUpdater.downloadUpdate();
-    const install=await dialog.showMessageBox(window,{message:t[11],buttons:[t[3],t[4]],cancelId:1});
+    const install=await dialog.showMessageBox(window,{message:t.install,buttons:[t.continue,t.cancel],cancelId:1});
     if(install.response===0) updater.autoUpdater.quitAndInstall(false,true);
-  } catch { await dialog.showMessageBox(window,{type:'error',message:t[5]}); } finally {updating=false;}
+  } catch { await dialog.showMessageBox(window,{type:'error',message:t.failed}); } finally {updating=false;}
 }
 async function createWindow() {
   window = new BrowserWindow({width:1280,height:850,minWidth:390,minHeight:600,title:'ServerNet Studio',
-    backgroundColor:'#f7f9fc',icon:fileURLToPath(new URL('../build/icon.png',import.meta.url)),
+    backgroundColor:'#0b1324',icon:fileURLToPath(new URL('../build/icon.png',import.meta.url)),
     webPreferences:{nodeIntegration:false,nodeIntegrationInWorker:false,contextIsolation:true,sandbox:true,
       webSecurity:true,allowRunningInsecureContent:false,webviewTag:false,spellcheck:false,partition:'persist:servernet-studio'}});
   const contents=window.webContents, session=contents.session;
@@ -71,15 +88,24 @@ async function createWindow() {
   contents.on('will-frame-navigate',(event)=>{if(!event.isMainFrame)event.preventDefault();});
   contents.on('will-redirect',(event,value)=>{if(!internal(value))event.preventDefault();});
   contents.setWindowOpenHandler(({url})=>{if(ownPage()&&external(url))void shell.openExternal(url);return{action:'deny'};});
-  session.on('will-download',event=>event.preventDefault());
-  window.on('closed',()=>{login?.abort();window=null;});
+  function onDownload(event, item, sender) {
+    const filename = sender === contents && ownPage() && item.getURLChain().length === 1
+      ? conversationExport(item.getURL()) : null;
+    if (!filename || item.getMimeType() !== 'text/plain') {
+      event.preventDefault();
+      return;
+    }
+    item.setSaveDialogOptions({defaultPath: filename, filters: [{name: 'Text', extensions: ['txt']}]});
+  }
+  session.on('will-download', onDownload);
+  window.on('closed',()=>{session.removeListener('will-download', onDownload);login?.abort();window=null;});
   contents.on('did-fail-load',(_event,code,_description,_url,isMainFrame)=>{
     if(isMainFrame && code!==-3 && window) void window.loadFile(offline);
   });
   const t=words(locale());
   Menu.setApplicationMenu(Menu.buildFromTemplate([
     ...(process.platform==='darwin'?[{role:'appMenu'}]:[]),
-    {label:'ServerNet',submenu:[{label:t[7],click:()=>{login?.abort();void window.loadURL(ORIGIN);}},{label:t[6],click:checkUpdates},
+    {label:'ServerNet',submenu:[{label:t.reconnect,click:()=>{login?.abort();void window.loadURL(ORIGIN);}},{label:t.update,click:checkUpdates},
       {label:'Downloads / دانلود',click:()=>shell.openExternal(DOWNLOADS)},
       {label:'Legal / مجوزها',click:()=>shell.openExternal(ORIGIN+'/legal')},{type:'separator'},{role:'quit'}]},
     {role:'editMenu'}, {role:'viewMenu',submenu:[{role:'resetZoom'},{role:'zoomIn'},{role:'zoomOut'},{role:'togglefullscreen'}]},
