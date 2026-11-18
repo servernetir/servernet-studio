@@ -1,5 +1,6 @@
 # SPDX-License-Identifier: AGPL-3.0-only
 import asyncio
+import base64
 import hashlib
 import json
 import secrets
@@ -12,6 +13,8 @@ from cryptography.fernet import Fernet
 from fastapi.testclient import TestClient
 
 from servernet.hosted.app import Settings, create_app
+
+PNG = 'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+jr0kAAAAASUVORK5CYII='
 
 
 @pytest.fixture
@@ -32,6 +35,17 @@ def setup(tmp_path):
                 'ai': {'spent_month':37, 'prompt_tokens_month': 8, 'completion_tokens_month': 4}})
         if request.url.path.endswith('/studio/revoke'):
             return httpx.Response(200, json={'ok':True})
+        if request.url.path.endswith('/studio/free/chat'):
+            return httpx.Response(200, json={'text':'A free answer','usage':{'prompt_tokens':4},'charge_irt':0})
+        if request.url.path.endswith('/studio/media/quote'):
+            return httpx.Response(200, json={'max_hold_irt':65})
+        if request.url.path.endswith('/inference'):
+            return httpx.Response(202, json={'id':'remote-job','status':'processing'})
+        if '/studio/media/' in request.url.path:
+            return httpx.Response(200, json={'images':['data:image/png;base64,'+PNG]},
+                                  headers={'X-ServerNet-Charge-Irt':'41'})
+        if request.url.path.endswith('/studio/mcp'):
+            return httpx.Response(200, json={'jsonrpc':'2.0','id':1,'result':{'tools':[{'name':'list_models'}]}})
         if request.url.path.endswith('/chat/completions'):
             if mode['timeout']:
                 raise httpx.ReadTimeout('fixture timeout', request=request)
@@ -176,6 +190,54 @@ def test_history_isolated_between_customers(setup):
     assert setup[1].get('/api/conversations').json() == []
     assert setup[1].get('/api/conversations/'+body['conversation_id']).status_code == 404
     assert setup[1].get('/api/conversations/'+body['conversation_id']+'/export').status_code == 404
+
+
+def test_media_quote_confirmation_recovery_and_file_are_owned(setup):
+    headers, chat = new_chat(setup)
+    browser, calls = setup[1:3]
+    data = {'model':'fixture-image','category':'image','parameters':{'prompt':'A blue square'}}
+    assert browser.post('/api/media/quote',headers=headers,json=data).json() == {'max_hold_irt':65}
+    assert not any(r.url.path.endswith('/inference') for r in calls)
+    identifier = 'c'*32
+    job = {**data,'request_id':identifier,'conversation_id':chat['conversation_id'],
+           'label':'A blue square','max_hold_irt':65}
+    assert browser.post('/api/media',headers=headers,json=job).json()['state'] == 'processing'
+    assert browser.post('/api/media',headers=headers,json=job).json()['state'] == 'processing'
+    upstream = [r for r in calls if r.url.path.endswith('/inference')]
+    assert len(upstream) == 1
+    assert upstream[0].headers['Idempotency-Key'] == 'studio-media-'+identifier
+    assert upstream[0].headers['X-ServerNet-Max-Hold-Irt'] == '65'
+    result = browser.get('/api/media/'+identifier).json()
+    assert result['state'] == 'ready' and result['charge_irt'] == 41
+    download = result['assets'][0]['download']
+    assert browser.get(download).content == base64.b64decode(PNG)
+    assert browser.get(download).headers['content-disposition'].startswith('attachment')
+    assert browser.get('/api/conversations/'+chat['conversation_id']).json()['messages'][-1]['media']['state'] == 'ready'
+    login(setup,'another-customer')
+    assert browser.get('/api/media/'+identifier).status_code == 404
+    assert browser.get(download).status_code == 404
+
+
+def test_browser_image_is_only_sent_as_inline_input_and_not_stored_in_chat_history(setup):
+    headers, body = new_chat(setup)
+    browser, calls = setup[1:3]
+    image = 'data:image/png;base64,'+PNG
+    assert browser.post('/api/chat',headers=headers,json=body|{'image':'https://evil.test/'}).status_code == 422
+    result = browser.post('/api/chat',headers=headers,json=body|{'image':image})
+    assert result.status_code == 200 and 'event: done' in result.text
+    out = next(request for request in calls if request.url.path.endswith('/chat/completions'))
+    parts = json.loads(out.content)['messages'][-1]['content']
+    assert parts[-1] == {'type':'image_url','image_url':{'url':image}}
+    assert image not in browser.get('/api/conversations/'+body['conversation_id']).text
+
+
+def test_free_chat_uses_separate_zero_charge_route_and_mcp_uses_own_key(setup):
+    assert setup[1].get('/api/tools/mcp').status_code == 401
+    headers, body = new_chat(setup)
+    result = setup[1].post('/api/chat',headers=headers,json=body|{'model':'studio-free-chat'})
+    assert 'A free answer' in result.text and '"charge_irt": 0' in result.text
+    assert not any(r.url.path.endswith('/chat/completions') for r in setup[2])
+    assert setup[1].get('/api/tools/mcp').json() == {'tools':[{'name':'list_models'}]}
 
 
 def test_export_returns_owned_conversation_as_plain_text(setup):

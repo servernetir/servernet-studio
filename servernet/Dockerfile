@@ -3,6 +3,7 @@ WORKDIR /build
 COPY servernet/web/package*.json ./
 RUN npm ci --ignore-scripts --no-audit --no-fund
 COPY servernet/web/ ./
+COPY servernet/extension/ /extension/
 RUN npm run build
 
 FROM python:3.12-slim

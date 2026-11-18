@@ -24,13 +24,22 @@ export function external(value) {
   if (!u || u.protocol !== 'https:' || u.port) return false;
   if (u.origin === 'https://console.servernet.cloud') return /^\/(?:en\/|tr\/)?(?:account(?:\/|$)|login(?:\/|$)|register(?:\/|$))/.test(u.pathname);
   return u.origin === 'https://servernet.cloud' && /^\/(?:en\/|tr\/)?(?:studio\/download|ai\/(?:models|docs))\/?$/.test(u.pathname)
-    || u.origin === ORIGIN && u.pathname === '/legal';
+    || u.origin === ORIGIN && (u.pathname === '/legal' || u.pathname === '/studio-chrome-extension.zip');
 }
 export function conversationExport(value) {
   const u = url(value);
   if (!u || u.origin !== ORIGIN || u.search || u.hash) return null;
   const match = /^\/api\/conversations\/([a-f0-9]{32})\/export$/.exec(u.pathname);
   return match ? `servernet-conversation-${match[1]}.txt` : null;
+}
+export function mediaExport(value, mime) {
+  const u = url(value);
+  if (!u || u.origin !== ORIGIN || u.search !== '?download=true' || u.hash) return null;
+  const match = /^\/api\/media\/([a-f0-9]{32})\/asset\/[0-7]$/.exec(u.pathname);
+  const extensions = {'image/png':'png','image/jpeg':'jpg','image/webp':'webp','image/gif':'gif',
+    'video/mp4':'mp4','video/webm':'webm','audio/wav':'wav','audio/mpeg':'mp3',
+    'audio/ogg':'ogg','audio/flac':'flac','audio/aac':'aac'};
+  return match && Object.hasOwn(extensions,mime) ? 'studio-output-'+match[1]+'.'+extensions[mime] : null;
 }
 export function browserApproval(value, identifier) {
   const u = url(value);
