@@ -1,17 +1,32 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 // Copyright 2026 ServerNet contributors
-import React, {useEffect, useRef, useState} from 'react';
+import React, {useEffect, useLayoutEffect, useRef, useState} from 'react';
 import {createRoot} from 'react-dom/client';
-import {ArrowUp, ArrowUpRight, Wallet, Plus, MessageSquare, LogOut, Sparkles, Code2, Lightbulb, RefreshCw, Menu, X, ShieldCheck} from 'lucide-react';
+import {ArrowUp, ArrowUpRight, Wallet, Plus, MessageSquare, LogOut, Sparkles, Code2, Lightbulb, RefreshCw, Menu, X, ShieldCheck, Sun, Moon} from 'lucide-react';
 import {copy, type Locale} from './copy';
 import './style.css';
 
 type Chat = {id:string,title:string};
 type Message = {role:string,content:string};
 type Account = {customer:{name:string},wallet:{currency:string,unit:string,available:number,reserved:number},ai:{spent_month:number,prompt_tokens_month:number,completion_tokens_month:number}};
+const LANGUAGE_KEY = 'servernet.studio.language';
+const THEME_KEY = 'servernet.studio.theme';
+
+function readPreference(key: string) {
+ try { return localStorage.getItem(key); } catch { return null; }
+}
+
+function savePreference(key: string, value: string) {
+ try { localStorage.setItem(key, value); } catch { /* The choice still applies until this page closes. */ }
+}
+
 class ApiError extends Error {constructor(public status:number){super('ServerNet request failed');}}
 export function App(){
- const [locale,setLocale]=useState<Locale>(()=>{const v=localStorage.getItem('servernet.studio.locale');return v==='en'||v==='tr'?v:'fa';});
+ const [locale,setLocale]=useState<Locale>(()=>{
+  const saved=readPreference(LANGUAGE_KEY);
+  return saved==='fa'||saved==='tr'?saved:'en';
+ });
+ const [theme,setTheme]=useState(()=>(readPreference(THEME_KEY)==='light'?'light':'dark'));
  const t=copy[locale], rtl=locale==='fa';
  const [ready,setReady]=useState(false),[signed,setSigned]=useState(false),[csrf,setCsrf]=useState('');
  const [account,setAccount]=useState<Account|null>(null),[models,setModels]=useState<string[]>([]),[model,setModel]=useState('');
@@ -21,7 +36,11 @@ export function App(){
  const requestVersion=useRef(0);
  const fmt=(n:number)=>new Intl.NumberFormat(locale==='fa'?'fa-IR':locale==='tr'?'tr-TR':'en-US').format(n);
  const consolePath=(path:string)=>`https://console.servernet.cloud/${locale==='fa'?'':locale+'/'}${path}`;
- useEffect(()=>{document.documentElement.lang=locale;document.documentElement.dir=rtl?'rtl':'ltr';localStorage.setItem('servernet.studio.locale',locale);},[locale,rtl]);
+ useLayoutEffect(()=>{
+  document.documentElement.lang=locale;
+  document.documentElement.dir=rtl?'rtl':'ltr';
+  document.documentElement.dataset.signInTheme=theme;
+ },[locale,rtl,theme]);
  async function api(path:string, init:RequestInit={}){
   const r=await fetch(path,{...init,headers:{'Content-Type':'application/json',...(init.method==='POST'?{'X-CSRF-Token':csrf}:{}),...init.headers}});
   if(!r.ok)throw new ApiError(r.status); return r;
@@ -62,10 +81,49 @@ export function App(){
   finally{setBusy(false);}
  }
  async function logout(){try{await api('/api/logout',{method:'POST'});setSigned(false);setAccount(null);setMessages([]);setChats([]);setCsrf('');setActive('');setError('');}catch(e){fail(e);}}
- const langs=<select className="language" aria-label="Language / زبان" value={locale} onChange={e=>setLocale(e.target.value as Locale)}><option value="fa">فارسی</option><option value="en">English</option><option value="tr">Türkçe</option></select>;
+ const langs=<select className="language" aria-label="Language / زبان" value={locale} onChange={e=>{
+  const next=e.target.value as Locale;
+  setLocale(next);
+  savePreference(LANGUAGE_KEY,next);
+ }}><option value="en">English</option><option value="fa">فارسی</option><option value="tr">Türkçe</option></select>;
  const brand=<div className="brand"><img src="/servernet.svg" alt=""/><div><b>ServerNet <span>Studio</span></b><small>{t.tagline}</small></div></div>;
  if(!ready)return <div className="loading"><img src="/servernet.svg" alt="ServerNet"/>{t.loading}</div>;
- if(!signed)return <main className="login-page"><nav>{brand}{langs}</nav><div className="login-grid"><section className="login-copy"><div className="eyebrow"><Sparkles size={15}/> SERVERNET AI</div><h1>{t.loginTitle}</h1><p>{t.loginSub}</p><div className="login-points"><span><ShieldCheck size={19}/>{t.central}</span><span><Wallet size={19}/>{t.foot}</span></div></section><section className="login-card"><div className="logo-orbit"><img src="/servernet.svg" alt="ServerNet"/></div><h2>ServerNet Studio</h2><p>{t.tagline}</p>{error&&<div className="notice" role="alert">{error}</div>}<a className="primary login-button" href={"/auth/start?lang="+locale}>{t.login}<ArrowUpRight size={18}/></a><a className="google-button" href={"/auth/start?method=google&lang="+locale}>{t.google}</a><a className="register" href={"/auth/start?method=register&lang="+locale}>{t.register}</a><div className="card-foot"><ShieldCheck size={14}/>{t.central}</div></section></div><footer><span>ServerNet Studio</span><a href="/legal">{t.legal}</a></footer></main>;
+ if(!signed){
+  const nextTheme=theme==='dark'?'light':'dark';
+  return <main className="login-page">
+   <nav>
+    {brand}
+    <div className="login-settings">
+     {langs}
+     <button type="button" className="theme-toggle" onClick={()=>{
+      setTheme(nextTheme);
+      savePreference(THEME_KEY,nextTheme);
+     }}>
+      {nextTheme==='light'?<Sun size={16} aria-hidden="true"/>:<Moon size={16} aria-hidden="true"/>}
+      {nextTheme==='light'?t.lightMode:t.darkMode}
+     </button>
+    </div>
+   </nav>
+   <div className="login-grid">
+    <section className="login-copy">
+     <div className="eyebrow"><Sparkles size={15}/> SERVERNET AI</div>
+     <h1>{t.loginTitle}</h1>
+     <p>{t.loginSub}</p>
+     <div className="login-points"><span><ShieldCheck size={19}/>{t.central}</span><span><Wallet size={19}/>{t.foot}</span></div>
+    </section>
+    <section className="login-card">
+     <div className="logo-orbit"><img src="/servernet.svg" alt=""/></div>
+     <h2>ServerNet Studio</h2>
+     <p>{t.tagline}</p>
+     {error&&<div className="notice" role="alert">{error}</div>}
+     <a className="primary login-button" href={"/auth/start?lang="+locale}>{t.login}<ArrowUpRight size={18}/></a>
+     <a className="google-button" href={"/auth/start?method=google&lang="+locale}>{t.google}</a>
+     <a className="register" href={"/auth/start?method=register&lang="+locale}>{t.register}</a>
+    </section>
+   </div>
+   <footer><span>ServerNet Studio</span><a href="/legal">{t.legal}</a></footer>
+  </main>;
+ }
  return <div className="workspace"><aside className={mobile?'sidebar open':'sidebar'}>{brand}<button className="mobile-close" onClick={()=>setMobile(false)} aria-label={t.close}><X/></button><button className="new-chat" onClick={fresh} disabled={busy}><Plus size={18}/>{t.new}</button><div className="nav-label">{t.chats}</div><div className="chat-list">{chats.length===0?<p className="empty-list">{t.empty}</p>:chats.map(c=><button key={c.id} className={c.id===active?'chat active':'chat'} onClick={()=>open(c)} disabled={busy}><MessageSquare size={15}/><span>{c.title==='New conversation'?t.new:c.title}</span></button>)}</div><div className="wallet-card"><div className="wallet-label"><Wallet size={16}/>{t.wallet}<button onClick={refresh} aria-label={t.retryAccount}><RefreshCw size={13}/></button></div><small>{t.available}</small><strong>{fmt(account?.wallet.available??0)} <span>{t.toman}</span></strong>{Boolean(account?.wallet.reserved)&&<small>{t.held}: {fmt(account!.wallet.reserved)} {t.toman}</small>}<a href={consolePath('account/topup')} target="_blank" rel="noopener noreferrer">{t.topup}<Plus size={15}/></a></div><a className="console-link" href={consolePath('account/ai')} target="_blank" rel="noopener noreferrer">{t.console}<ArrowUpRight size={16}/></a><div className="profile"><div className="avatar">{account?.customer.name.charAt(0)}</div><span>{account?.customer.name}</span><button onClick={logout} disabled={busy} aria-label={t.logout}><LogOut size={17}/></button></div><a className="legal-link" href="/legal">{t.legal}</a></aside>{mobile&&<button className="backdrop" aria-label={t.close} onClick={()=>setMobile(false)}/>}
  <main className="main-panel"><header><div className="model-selector"><button className="hamburger" onClick={()=>setMobile(true)} aria-label={t.menu}><Menu/></button><span className="model-dot"/><select aria-label={t.model} value={model} onChange={e=>setModel(e.target.value)} disabled={busy}>{models.length?models.map(m=><option key={m}>{m}</option>):<option>{t.noModels}</option>}</select></div><div className="header-right">{langs}<span className="usage"><span>{t.usage}</span><b>{fmt((account?.ai.prompt_tokens_month??0)+(account?.ai.completion_tokens_month??0))} {t.token}</b></span></div></header>
  <div className="conversation-body">{messages.length===0?<div className="welcome"><div className="eyebrow"><span/> SERVERNET INTELLIGENCE</div><h1>{t.title}</h1><p>{t.subtitle}</p><div className="suggestions">{[MessageSquare,Code2,Lightbulb].map((Icon,i)=><button key={i} onClick={()=>{setText(t.prompts[i]);input.current?.focus();}} disabled={!model}><Icon size={20}/><span>{t.ideas[i]}</span><ArrowUpRight size={15}/></button>)}</div><div className="welcome-note"><ShieldCheck size={15}/>{t.foot}</div></div>:<div className="messages">{messages.map((m,i)=><article key={i} className={'message '+m.role}><div className="message-avatar">{m.role==='assistant'?<img src="/servernet.svg" alt=""/>:account?.customer.name.charAt(0)}</div><div><b>{m.role==='assistant'?t.assistant:t.you}</b><div className="message-content" dir="auto">{m.content||t.writing}</div></div></article>)}<div ref={bottom}/></div>}</div>
