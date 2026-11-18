@@ -103,7 +103,7 @@ def extracted_values(body):
     keys = ('images','image','image_url','image_urls','data','b64_json','audio','audio_url','video_url','videos',
             'video','mask_url','results','text','transcription','output','result','url','base64','content','parts','inlineData','candidates')
     def visit(value, depth=0):
-        if depth > 6:
+        if depth > 7:
             return
         if isinstance(value, str):
             yield value
@@ -159,6 +159,9 @@ class MediaStore:
                 return previous, False
             if not db.execute('SELECT 1 FROM conversations WHERE id=? AND subject=?', (body.conversation_id, subject)).fetchone():
                 raise HTTPException(404, 'Conversation not found.')
+            if db.execute("""SELECT 1 FROM studio_media_jobs WHERE subject=? AND conversation=?
+                             AND state IN ('sending','unknown')""", (subject, body.conversation_id)).fetchone():
+                raise HTTPException(409, 'A previous generation in this conversation needs reconciliation.')
             since = int(time.time())
             recent = db.execute('SELECT COUNT(*) FROM studio_media_jobs WHERE subject=? AND created>=?', (subject, since - 3600)).fetchone()[0]
             if recent >= 25:

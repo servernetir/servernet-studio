@@ -6,8 +6,10 @@ import {ArrowUp, ArrowUpRight, Code2, Lightbulb, Menu, MessageSquare, Moon, Pane
 import {copy, workspaceCopy, type Locale} from './copy';
 import {priceText, readModels, supportsStudio, type Model} from './catalog';
 import {ConversationLibrary, ModelCatalog, StudioTools, WorkspaceSidebar, localizedUrl, viewFromHash, type Account, type Chat, type View} from './workspace';
-import {ImageAttachment, MediaComposer, MediaResult, Thinking, normalizeImage, type MediaJob, type Parameters} from './inference';
+import {ImageAttachment, ImageAttachmentPreview, MediaComposer, MediaResult, Thinking, normalizeImage, type MediaJob, type Parameters} from './inference';
 import {inferenceCopy} from './inference-copy';
+import {connectorCopy} from './connector-copy';
+import {ConnectedServices} from './connectors';
 import './style.css';
 import './workspace.css';
 import './inference.css';
@@ -57,6 +59,7 @@ export function App() {
   const conversationBody = useRef<HTMLDivElement>(null);
   const stickToBottom = useRef(true);
   const input = useRef<HTMLTextAreaElement>(null);
+  const mobileToggle = useRef<HTMLButtonElement>(null);
   const mediaChecks = useRef(new Set<string>());
 
   const t = copy[locale];
@@ -90,9 +93,13 @@ export function App() {
 
   useEffect(() => {
     if (!mobile) return;
+    document.querySelector<HTMLButtonElement>('#studio-sidebar .sidebar-close')?.focus();
     const cancel = (event: KeyboardEvent) => { if (event.key === 'Escape') setMobile(false); };
     window.addEventListener('keydown', cancel);
-    return () => window.removeEventListener('keydown', cancel);
+    return () => {
+      window.removeEventListener('keydown', cancel);
+      if (mobileToggle.current?.getClientRects().length) mobileToggle.current.focus();
+    };
   }, [mobile]);
 
   useEffect(() => {
@@ -153,6 +160,13 @@ export function App() {
     if (location.hash.slice(1) !== target) location.hash = target;
   }
 
+  function useConnectionResult(result: string) {
+    if (busy || pending) return;
+    if (currentModel?.category !== 'chat') setModel(selectableModels.find(entry => entry.category === 'chat')?.id ?? '');
+    setText(draft => [draft, result].filter(Boolean).join('\n\n').slice(0, 8000));
+    navigate('chat');
+  }
+
   useEffect(() => {
     if (!signed) return;
     const acceptCapture = (event: MessageEvent) => {
@@ -195,6 +209,7 @@ export function App() {
 
   const processingIds = messages.filter(message=>message.media?.state==='processing'||message.media?.state==='sending')
     .map(message=>message.media!.id).join(',');
+  const unresolvedMedia = messages.some(message => message.media?.state === 'unknown' || message.media?.state === 'sending');
   useEffect(() => {
     if (!processingIds || !signed) return;
     const timer=window.setInterval(()=>processingIds.split(',').forEach(id=>{void checkMedia(id);}), 8000);
@@ -250,6 +265,8 @@ export function App() {
     const sentImage=image;
     setImage(null);
     stickToBottom.current = true;
+    const previous = [...messages, {role: 'user', content: message, image: sentImage ?? undefined}];
+    setMessages([...previous, {role: 'assistant', content: ''}]);
     let id = active;
     let received = '';
     let finished = false;
@@ -261,8 +278,6 @@ export function App() {
         setActive(id);
         setChats(previous => [chat, ...previous]);
       }
-      const previous = [...messages, {role: 'user', content: message, image: sentImage ?? undefined}];
-      setMessages([...previous, {role: 'assistant', content: ''}]);
       const requestId = crypto.randomUUID().replaceAll('-', '');
       const response = await api('/api/chat', {
         method: 'POST',
@@ -311,6 +326,10 @@ export function App() {
         } catch {
           setPending(true);
         }
+      } else {
+        setMessages(messages);
+        setText(message);
+        setImage(sentImage);
       }
     } finally {
       if (frame!==null) cancelAnimationFrame(frame);
@@ -324,7 +343,8 @@ export function App() {
   }
 
   async function generateMedia(parameters: Parameters,label: string,max: number) {
-    if (busy || !currentModel || currentModel.category==='chat') return;
+    if (busy || pending || unresolvedMedia || !currentModel || currentModel.category==='chat') return;
+    ++requestVersion.current;
     setBusy(true);
     setError('');
     setCharge(null);
@@ -427,18 +447,20 @@ export function App() {
 
   const sidebarLabel = collapsed ? w.expand : w.collapse;
   const SidebarIcon = collapsed ? PanelLeftOpen : PanelLeftClose;
-  const displayedView = view==='tools'?f.tools:view === 'models' ? w.catalog : view === 'library' ? w.history : w[view];
+  const displayedView = view === 'connectors' ? connectorCopy[locale].heading : view === 'tools' ? f.tools
+    : view === 'models' ? w.catalog : view === 'library' ? w.history : w[view];
   return <div className="workspace">
     <WorkspaceSidebar brand={brand} locale={locale} view={view} open={mobile} collapsed={collapsed} chats={chats}
       active={active} account={account} busy={busy} close={() => setMobile(false)} navigate={navigate}
       fresh={fresh} openChat={open} refreshBalance={refresh} logout={logout}/>
-    {mobile && <button type="button" className="backdrop" aria-label={t.close} onClick={() => setMobile(false)}/>}
+    <button type="button" className="backdrop" data-open={mobile||undefined} tabIndex={mobile ? 0 : -1}
+      aria-label={t.close} onClick={() => setMobile(false)}/>
     <main className="main-panel">
       <header className="workspace-header">
         <div className="workspace-header-left">
           <button type="button" className="desktop-toggle icon-button" aria-controls="studio-sidebar" aria-expanded={!collapsed}
             aria-label={sidebarLabel} title={sidebarLabel} onClick={() => setCollapsed(!collapsed)}><SidebarIcon size={19}/></button>
-          <button type="button" className="mobile-toggle icon-button" aria-controls="studio-sidebar" aria-expanded={mobile}
+          <button ref={mobileToggle} type="button" className="mobile-toggle icon-button" aria-controls="studio-sidebar" aria-expanded={mobile}
             aria-label={w.expand} onClick={() => setMobile(true)}><Menu size={21}/></button>
           {view === 'chat'
             ? <div className="model-selector">
@@ -456,6 +478,7 @@ export function App() {
         </div>
       </header>
       {view === 'library' ? <ConversationLibrary locale={locale} chats={chats} busy={busy} open={open}/>
+        : view === 'connectors' ? <ConnectedServices locale={locale} csrf={csrf} useInChat={!busy && !pending ? useConnectionResult : undefined}/>
         : view === 'tools' ? <StudioTools locale={locale}/>
         : view !== 'chat' ? <ModelCatalog key={view} locale={locale} models={models} view={view} busy={busy} rate={rate}
           choose={id => { fresh(); setModel(id); }}/>
@@ -475,16 +498,20 @@ export function App() {
                 </button>)}
               </div>
             </div> : <div className="messages">
-              {messages.map((message, index) => <article key={index} className={'message ' + message.role}>
-                <div className="message-avatar">{message.role === 'assistant' ? <img src="/servernet.svg" alt=""/> : account?.customer.name.charAt(0)}</div>
-                <div>
-                  <b>{message.role === 'assistant' ? t.assistant : t.you}</b>
-                  {message.image&&<img className="sent-image" src={message.image} alt={f.draftImage}/>}
-                  {message.media ? <MediaResult job={message.media} locale={locale} amount={amount} refresh={()=>{void checkMedia(message.media!.id);}}/> :
-                    !message.content&&message.role==='assistant'&&busy ? <Thinking locale={locale}/> :
-                    <div className="message-content" dir="auto">{message.content}</div>}
-                </div>
-              </article>)}
+              {messages.map((message, index) => {
+                const media = message.media;
+                const waiting = !media && message.role === 'assistant' && !message.content && busy;
+                const working = waiting || media?.state === 'sending' || media?.state === 'processing' || media?.state === 'unknown';
+                return <article key={index} className={'message ' + message.role + (working ? ' message-working' : '')}>
+                  {!working && <div className="message-avatar">{message.role === 'assistant' ? <img src="/servernet.svg" alt=""/> : account?.customer.name.charAt(0)}</div>}
+                  <div>
+                    {!working && <b>{message.role === 'assistant' ? t.assistant : t.you}</b>}
+                    {message.image&&<img className="sent-image" src={message.image} alt={f.draftImage}/>}
+                    {media ? <MediaResult job={media} locale={locale} amount={amount} refresh={()=>{void checkMedia(media.id);}}/> :
+                      waiting ? <Thinking text={f.thinking}/> : <div className="message-content" dir="auto">{message.content}</div>}
+                  </div>
+                </article>;
+              })}
             </div>}
           </div>
           <div className="composer-area">
@@ -495,9 +522,9 @@ export function App() {
             {charge !== null && <div className="charge">{t.charged} · {amount(charge)??f.unavailable}</div>}
             {currentModel&&currentModel.category!=='chat' ?
               <MediaComposer key={currentModel.id} model={currentModel} locale={locale} text={text} setText={setText}
-                amount={amount} quote={quoteMedia} generate={generateMedia} isSending={busy}/> :
-              <form className="composer" data-thinking={busy||undefined} onSubmit={event => { event.preventDefault(); void send(); }}>
-              {(image||visionModel)&&<ImageAttachment locale={locale} source={image} remove={()=>setImage(null)} attach={file=>{void attach(file);}}/>}
+                amount={amount} quote={quoteMedia} generate={generateMedia} isSending={busy || pending || unresolvedMedia}/> :
+              <form className="composer" onSubmit={event => { event.preventDefault(); void send(); }}>
+              {image&&<ImageAttachmentPreview locale={locale} source={image} remove={()=>setImage(null)}/>}
               {image&&!currentModel?.vision&&<div className="notice">{f.useVision}</div>}
               <textarea ref={input} value={text} onChange={event => setText(event.target.value)} placeholder={t.placeholder} aria-label={t.placeholder}
                 maxLength={8000} rows={2} disabled={busy || pending || !model} onKeyDown={event => {
@@ -507,7 +534,9 @@ export function App() {
                   }
                 }}/>
               <div className="composer-bottom">
-                <button type="submit" className="send" aria-label={t.send} disabled={busy || pending || !model || !text.trim() || Boolean(image&&!currentModel?.vision)}><ArrowUp size={20}/></button>
+                {visionModel&&<ImageAttachment locale={locale} disabled={busy||pending||!model} attach={file=>{void attach(file);}}/>}
+                <button type="submit" className="send" aria-label={t.send} title={t.send}
+                  disabled={busy || pending || !model || !text.trim() || Boolean(image&&!currentModel?.vision)}><ArrowUp size={19}/></button>
               </div>
             </form>}
             <p className="composer-foot">{t.foot}</p>

@@ -20,7 +20,7 @@ PNG = 'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+jr
 @pytest.fixture
 def setup(tmp_path):
     calls = []
-    mode = {'status': 200, 'missing_charge': False, 'timeout': False}
+    mode = {'status': 200, 'missing_charge': False, 'timeout': False, 'media_timeout': False}
     def upstream(request):
         calls.append(request)
         if request.url.path == '/api/studio/token':
@@ -40,9 +40,11 @@ def setup(tmp_path):
         if request.url.path.endswith('/studio/media/quote'):
             return httpx.Response(200, json={'max_hold_irt':65})
         if request.url.path.endswith('/inference'):
+            if mode['media_timeout']:
+                raise httpx.ReadTimeout('fixture timeout', request=request)
             return httpx.Response(202, json={'id':'remote-job','status':'processing'})
         if '/studio/media/' in request.url.path:
-            return httpx.Response(200, json={'images':['data:image/png;base64,'+PNG]},
+            return httpx.Response(200, json={'candidates': [{'content': {'parts': [{'inlineData': {'data': PNG}}]}}]},
                                   headers={'X-ServerNet-Charge-Irt':'41'})
         if request.url.path.endswith('/studio/mcp'):
             return httpx.Response(200, json={'jsonrpc':'2.0','id':1,'result':{'tools':[{'name':'list_models'}]}})
@@ -216,6 +218,22 @@ def test_media_quote_confirmation_recovery_and_file_are_owned(setup):
     login(setup,'another-customer')
     assert browser.get('/api/media/'+identifier).status_code == 404
     assert browser.get(download).status_code == 404
+
+
+def test_unknown_media_blocks_resubmission_until_status_is_reconciled(setup):
+    headers, chat = new_chat(setup)
+    _, browser, calls, mode, _ = setup
+    mode['media_timeout'] = True
+    job = {'model': 'fixture-image', 'category': 'image', 'parameters': {'prompt': 'A blue square'},
+           'request_id': 'c' * 32, 'conversation_id': chat['conversation_id'], 'label': 'A blue square', 'max_hold_irt': 65}
+    changed = job | {'request_id': 'd' * 32}
+    assert browser.post('/api/media', headers=headers, json=job).json()['state'] == 'unknown'
+    assert browser.post('/api/media', headers=headers, json=job).json()['state'] == 'unknown'
+    assert browser.post('/api/media', headers=headers, json=changed).status_code == 409
+    assert len([request for request in calls if request.url.path.endswith('/inference')]) == 1
+    assert browser.get('/api/media/' + job['request_id']).json()['state'] == 'ready'
+    mode['media_timeout'] = False
+    assert browser.post('/api/media', headers=headers, json=changed).json()['state'] == 'processing'
 
 
 def test_browser_image_is_only_sent_as_inline_input_and_not_stored_in_chat_history(setup):
