@@ -22,7 +22,7 @@ Set `SERVERNET_STUDIO_FONTS` to the existing site's three IRANSans WOFF2 files, 
 
 ### Optional Gmail connection
 
-Gmail requires its own Google Web application OAuth client and an enabled Gmail API in the same Google Cloud project. Register `https://studio.servernet.cloud/auth/connectors/gmail/callback` as an authorized redirect URI and configure the consent screen for `https://www.googleapis.com/auth/gmail.metadata`. For production, complete Google's [verification requirements for restricted Gmail scopes](https://developers.google.com/workspace/gmail/api/auth/scopes), including security assessment where required.
+Gmail requires its own Google Web application OAuth client and an enabled Gmail API in the same Google Cloud project. Register `https://studio.servernet.cloud/auth/connectors/gmail/callback` as an authorized redirect URI and configure the consent screen for `https://www.googleapis.com/auth/gmail.labels`. Google lists this scope as non-sensitive and includes label editing in its grant. Studio uses it only for the inbox unread count. Follow the applicable [Google OAuth verification requirements](https://developers.google.com/workspace/gmail/api/auth/scopes) before enabling the OAuth app for the intended audience.
 
 Set `SERVERNET_STUDIO_GMAIL_CLIENT_ID` and `SERVERNET_STUDIO_GMAIL_CLIENT_SECRET` together in the private configuration or environment. Leave both unset until the provider setup is ready. Connect and disconnect using an authorized test account before enabling for customers. Verify Google consent, unread inbox count and revocation across two distinct Studio accounts. The connector requests only the inbox unread count, stores the encrypted refresh token and performs no background mailbox requests.
 

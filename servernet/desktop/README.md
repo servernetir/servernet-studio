@@ -14,9 +14,15 @@ Mac requires macOS 13 or later. Windows requires Windows 10 or later, x64. An in
 
 ## Identity and billing
 
-Sign-in opens the operating system's browser. The app shows a code for the user to enter in that browser, then uses a main-process-only verifier to claim a single-use, encrypted BFF session. Console SMS/identity/legal/2FA requirements remain in the console. No Google refresh token, client secret or AI Gateway key is embedded in the app, renderer or installer. The renderer has no Node integration, preload bridge or IPC commands. Provider billing is always performed by the central Gateway.
+Sign-in opens the operating system's browser. The app shows a code for the user to enter in that browser, then uses a main-process-only verifier to claim a single-use, encrypted BFF session. Console SMS/identity/legal/2FA requirements remain in the console. No Google refresh token, client secret or AI Gateway key is embedded in the app, renderer or installer. The renderer is sandboxed with Node integration disabled. Provider billing is always performed by the central Gateway.
 
 The hosted service must include `servernet/hosted/desktop.py`. Its health endpoint advertises `desktop_auth_protocol: 1`. Sign-in uses `/auth/desktop/start`, browser `/auth/desktop`, and `/auth/desktop/poll`; the ordinary console PKCE callback is unchanged. The code must match before console login begins; five incorrect guesses close the approval request. A ready session can be claimed only once, for 60 seconds, by the initiating verifier.
+
+## Browser workspace
+
+The installed app's Connections page can open a separate window for one HTTPS origin with local approval. The title displays the approved origin. The workspace uses an in-memory browser session and allows same-origin navigation in its main frame. To send a click or text, confirm the individual action in the native dialog. Text is inserted into the focused field. Enter passwords directly in the workspace. Closing either window or signing out clears the workspace session.
+
+The preload exposes four fixed workspace methods to the signed-in Studio main frame. The workspace site receives no Studio preload or cookies. The main process rejects popups, downloads, browser permission requests and navigation outside the approved origin. Control is confined to the workspace window and requires the user to be present.
 
 ## Local verification and builds
 

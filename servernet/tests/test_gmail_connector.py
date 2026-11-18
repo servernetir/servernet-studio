@@ -11,7 +11,6 @@ from cryptography.fernet import Fernet
 from fastapi.testclient import TestClient
 
 from servernet.hosted.app import Settings, create_app
-from servernet.hosted.connectors import MAX_CONNECTORS
 from servernet.hosted.gmail import SCOPE
 
 
@@ -151,12 +150,12 @@ def test_gmail_requires_both_private_settings(gmail):
         replace(settings, gmail_client_secret=None)
 
 
-def test_gmail_rejects_full_vault_before_provider_consent(gmail):
+def test_gmail_can_connect_after_more_than_a_page_of_server_connections(gmail):
     client, _, _, calls, _ = gmail
     _, headers = sign_in(gmail)
     connector = {'kind': 'https_token', 'target': 'https://example.com', 'secret': 'fixture-token'}
-    for index in range(MAX_CONNECTORS):
+    for index in range(35):
         assert client.post('/api/connectors', headers=headers, json=connector | {'name': f'Fixture {index}'}).status_code == 201
     response = client.post('/api/connectors/gmail/start', headers=headers)
-    assert response.status_code == 409 and 'authorization_url' not in response.json()
+    assert response.status_code == 200 and 'authorization_url' in response.json()
     assert not calls

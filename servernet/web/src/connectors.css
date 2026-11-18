@@ -58,6 +58,8 @@
 }
 .connection-option h3, .connection-form h3 { font-size: .91rem; margin: 0; }
 .connection-option p { flex: 1; color: var(--muted); font-size: .81rem; line-height: 1.75; }
+.connection-note { color: var(--muted); font-size: .74rem; line-height: 1.6; }
+.connection-more { margin-block-start: .75rem; }
 .connection-form {
   margin-block-start: .75rem;
   padding: clamp(.9rem, 3vw, 1.4rem);
@@ -75,7 +77,7 @@
 }
 .connection-fields label { min-width: 0; display: grid; gap: .35rem; font-size: .82rem; }
 .connection-wide { grid-column: 1 / -1; }
-.connection-fields :is(input, textarea) {
+.connection-fields :is(input, select, textarea), .connector-mcp-url {
   width: 100%;
   min-height: 41px;
   padding: .5rem .7rem;
@@ -86,6 +88,11 @@
 }
 .connection-fields textarea { resize: vertical; font-family: ui-monospace, monospace; }
 .connection-fields small { color: var(--muted); line-height: 1.65; }
+.desktop-fields { width: 100%; margin-block: 0; }
+.desktop-workspace-status { display: flex; justify-content: space-between; align-items: center; width: 100%; gap: .5rem; }
+.desktop-workspace-status strong, .desktop-workspace-status bdi { display: block; font-size: .75rem; overflow-wrap: anywhere; }
+.desktop-workspace-status bdi { color: var(--muted); margin-block-start: .25rem; }
+.connector-mcp-url { font-family: monospace; font-size: .75rem; }
 @media (max-width: 550px) {
   .connection-options, .connection-fields { grid-template-columns: minmax(0, 1fr); }
 }

@@ -17,6 +17,30 @@ TOKEN = {
 }
 
 
+def test_server_connections_are_paginated_without_a_shared_vault_cap(setup):
+    browser = setup[1]
+    owner = login(setup)
+    created = set()
+    for index in range(35):
+        response = browser.post('/api/connectors', json=TOKEN | {'name': f'Server {index}'}, headers=owner)
+        assert response.status_code == 201
+        created.add(response.json()['id'])
+
+    page = browser.get('/api/connectors').json()
+    cursor = page['next_cursor']
+    assert len(page['data']) == 30
+    extra = browser.post('/api/connectors', json=TOKEN, headers=owner).json()['id']
+    next_page = browser.get('/api/connectors', params={'before': cursor}).json()
+    old = [entry['id'] for entry in page['data'] + next_page['data'] if entry['id'] != extra]
+    assert len(old) == len(set(old)) == len(created)
+    assert set(old) == created
+    assert 'next_cursor' not in next_page
+
+    login(setup, 'customer-2')
+    assert browser.get('/api/connectors', params={'before': cursor}).json()['data'] == []
+    assert browser.get('/api/connectors', params={'before': 'invalid'}).status_code == 422
+
+
 def test_connection_credentials_are_encrypted_and_owned_by_account(setup, monkeypatch):
     app, browser, calls, _, settings = setup
     assert browser.get('/api/connectors').status_code == 401

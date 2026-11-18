@@ -1,30 +1,32 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 import {useState, type ReactNode} from 'react';
 import {
-  ArrowUpRight, AudioLines, Boxes, Clapperboard, Download, Images, KeyRound, LibraryBig,
-  Link2, LogOut, MessageSquare, Plug, Plus, RefreshCw, Search, Wallet, X,
+  ArrowUpRight, AudioLines, Boxes, Clapperboard, Download, Folder, Images, LibraryBig,
+  Link2, LogOut, MessageSquare, Plus, RefreshCw, Search, Wallet, X,
 } from 'lucide-react';
 import {copy, workspaceCopy, type Locale} from './copy';
 import {priceText, pricingUnit, supportsStudio, type Model} from './catalog';
 import {inferenceCopy} from './inference-copy';
 import {connectorCopy} from './connector-copy';
+import {projectCopy} from './project-copy';
 
-export type Chat = {id: string; title: string};
+export type Chat = {id: string; title: string; project_id?: string | null};
 export type Account = {
   customer: {name: string};
   wallet: {currency: string; unit: string; available: number; reserved: number};
   ai: {spent_month: number; prompt_tokens_month: number; completion_tokens_month: number};
   display?: {eur_rate_irt: number | null; native: boolean};
 };
-export type View = 'chat' | 'models' | 'library' | 'image' | 'video' | 'audio' | 'tools' | 'connectors';
+export type View = 'chat' | 'models' | 'library' | 'image' | 'video' | 'audio' | 'projects' | 'connectors';
 
 const viewIcons = {
   chat: MessageSquare, models: Boxes, library: LibraryBig, image: Images, video: Clapperboard, audio: AudioLines,
-  tools: Plug, connectors: Link2,
+  projects: Folder, connectors: Link2,
 };
 
 export function viewFromHash(): View {
-  const hash = location.hash.slice(1);
+  const hash = location.hash.slice(1).split('/')[0];
+  if (hash === 'tools') return 'connectors';
   return Object.hasOwn(viewIcons, hash) ? hash as View : 'chat';
 }
 
@@ -46,6 +48,7 @@ type SidebarProps = {
   active: string;
   account: Account | null;
   busy: boolean;
+  withinProject: boolean;
   close: () => void;
   navigate: (view: View) => void;
   fresh: () => void;
@@ -57,13 +60,14 @@ type SidebarProps = {
 export function WorkspaceSidebar(props: SidebarProps) {
   const {locale, view, chats, active, account, busy} = props;
   const t = copy[locale], w = workspaceCopy[locale];
-  const f = inferenceCopy[locale];
+  const p = projectCopy[locale];
   const rate = account?.display?.eur_rate_irt ?? null;
   const consoleUrl = (path: string) => localizedUrl('https://console.servernet.cloud', locale, path);
 
   function navLink(target: View, title: string) {
     const Icon = viewIcons[target];
-    return <button type="button" className="nav-link" onClick={() => props.navigate(target)} aria-current={view === target ? 'page' : undefined}>
+    const current = view === 'chat' && props.withinProject ? 'projects' : view;
+    return <button type="button" className="nav-link" onClick={() => props.navigate(target)} aria-current={current === target ? 'page' : undefined}>
       <Icon size={17} aria-hidden="true"/><span>{title}</span>
     </button>;
   }
@@ -74,11 +78,14 @@ export function WorkspaceSidebar(props: SidebarProps) {
         {props.brand}
         <button type="button" className="sidebar-close icon-button" onClick={props.close} aria-label={t.close}><X size={18}/></button>
       </div>
-      <button type="button" className="new-chat" onClick={props.fresh} disabled={busy}><Plus size={18}/>{t.new}</button>
+      <button type="button" className="new-chat" onClick={props.fresh} disabled={busy}>
+        <Plus size={18} aria-hidden="true"/>{props.withinProject ? p.newChat : t.new}
+      </button>
       <div className="sidebar-scroll">
         <nav className="workspace-nav" aria-label={w.navigation}>
           <div className="nav-group">
-            {navLink('chat', w.chat)}
+            {navLink('chat', props.withinProject ? p.outside : w.chat)}
+            {navLink('projects', p.title)}
             {navLink('models', w.catalog)}
             {navLink('library', w.history)}
           </div>
@@ -88,11 +95,7 @@ export function WorkspaceSidebar(props: SidebarProps) {
             {navLink('video', w.video)}
             {navLink('audio', w.audio)}
           </div>
-          <a className="nav-link api-link" href={consoleUrl('account/ai')} target="_blank" rel="noopener noreferrer">
-            <KeyRound size={17} aria-hidden="true"/><span>{w.api}</span><ArrowUpRight size={13} aria-hidden="true"/>
-          </a>
           {navLink('connectors', connectorCopy[locale].heading)}
-          {navLink('tools', f.tools)}
         </nav>
         {chats.length > 0 && <section className="recent-chats" aria-label={w.recent}>
           <h2 className="nav-label">{w.recent}</h2>
@@ -115,8 +118,11 @@ export function WorkspaceSidebar(props: SidebarProps) {
           {Boolean(account?.wallet.reserved) && <small>{t.held} · {priceText(account!.wallet.reserved, locale, rate) ?? '—'}</small>}
         </div>
         <div className="profile">
-          <div className="avatar" aria-hidden="true">{account?.customer.name.charAt(0)}</div>
-          <span dir="auto">{account?.customer.name}</span>
+          {account && <a className="profile-dashboard" href={consoleUrl('account/ai')} target="_blank" rel="noopener noreferrer"
+            title={w.api} aria-label={`${account.customer.name} · ${w.api}`}>
+            <span className="avatar" aria-hidden="true">{account.customer.name.charAt(0)}</span>
+            <span dir="auto">{account.customer.name}</span><ArrowUpRight size={13} aria-hidden="true"/>
+          </a>}
           <button type="button" className="icon-button" onClick={props.logout} disabled={busy} aria-label={t.logout} title={t.logout}><LogOut size={17}/></button>
         </div>
         <a className="legal-link" href="/legal">{t.legal}</a>
@@ -199,53 +205,19 @@ export function ModelCatalog({locale, models, view, busy, choose, rate}: {
   </section>;
 }
 
-export function StudioTools({locale}:{locale:Locale}) {
-  const f = inferenceCopy[locale];
-  const [checking,setChecking]=useState(false);
-  const [status,setStatus]=useState<'ready'|'error'|null>(null);
-  async function check() {
-    setChecking(true);
-    setStatus(null);
-    try {
-      const response=await fetch('/api/tools/mcp');
-      if (!response.ok || !(await response.json()).tools.some((tool:{name:string})=>tool.name==='list_models')) throw Error('MCP unavailable');
-      setStatus('ready');
-    } catch {setStatus('error');}
-    finally {setChecking(false);}
-  }
-  return <section className="tool-view tools-view">
-    <header className="tool-heading"><h1>{f.toolsHeading}</h1></header>
-    <section>
-      <h2>{f.browserHeading}</h2><p>{f.browserText}</p>
-      <a className="secondary-button" href="https://studio.servernet.cloud/studio-chrome-extension.zip"
-        target="_blank" rel="noopener noreferrer"><Download size={16}/>{f.extension}</a>
-      <p className="install-hint">{f.install}</p>
-    </section>
-    <section>
-      <h2>{f.mcpHeading}</h2><p>{f.mcpText}</p>
-      <input className="mcp-url" dir="ltr" readOnly aria-label={f.mcpHeading} value="https://servernet.cloud/v1/studio/mcp"
-        onFocus={event=>event.target.select()}/>
-      <a className="secondary-button" href={localizedUrl('https://console.servernet.cloud', locale, 'account/ai')}
-        target="_blank" rel="noopener noreferrer">{f.mcpKey}<ArrowUpRight size={16}/></a>
-      {' '}<button type="button" className="secondary-button" onClick={()=>{void check();}} disabled={checking}>{f.testMcp}</button>
-      {status&&<p role="status">{status==='ready'?f.mcpReady:f.mcpError}</p>}
-    </section>
-  </section>;
-}
-
-export function ConversationLibrary({chats, locale, busy, open}: {
-  chats: Chat[]; locale: Locale; busy: boolean; open: (chat: Chat) => void;
+export function ConversationLibrary({chats, locale, busy, open, title, emptyLabel}: {
+  chats: Chat[]; locale: Locale; busy: boolean; open: (chat: Chat) => void; title?: string; emptyLabel?: string;
 }) {
   const [search, setSearch] = useState('');
   const t = copy[locale], w = workspaceCopy[locale];
   const query = search.trim().toLocaleLowerCase(locale);
   const matched = chats.filter(chat => chatTitle(chat, locale).toLocaleLowerCase(locale).includes(query));
-  return <section className="tool-view" aria-labelledby="library-title">
-    <header className="tool-heading">
+  return <section className={title ? 'embedded-library' : 'tool-view'} aria-labelledby="library-title">
+    {title ? <h2 id="library-title">{title}</h2> : <header className="tool-heading">
       <div><h1 id="library-title">{w.history}</h1><p>{w.historyDescription}</p></div>
-    </header>
+    </header>}
     <SearchField label={w.searchChats} value={search} onChange={setSearch}/>
-    {matched.length === 0 ? <p className="empty-state" role="status">{chats.length === 0 ? t.empty : w.noResults}</p> :
+    {matched.length === 0 ? <p className="empty-state" role="status">{chats.length === 0 ? emptyLabel ?? t.empty : w.noResults}</p> :
       <ul className="library-list">
         {matched.map(chat => <li key={chat.id} className="library-row">
           <button type="button" className="library-chat" onClick={() => open(chat)} disabled={busy} title={w.openChat}>
