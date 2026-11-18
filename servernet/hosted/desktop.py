@@ -35,7 +35,27 @@ TEXT = {
 
 def page(lang, content):
     title = html.escape(TEXT[lang][0])
-    return '<!doctype html><html lang="'+lang+'" dir="'+('rtl' if lang == 'fa' else 'ltr')+'"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>'+title+'</title><link rel="stylesheet" href="/assets/desktop-auth.css"></head><body><main><img src="/servernet.svg" alt="ServerNet"><h1>'+title+'</h1>'+content+'</main></body></html>'
+    light_mode = {'en': 'Light mode', 'fa': 'حالت روشن', 'tr': 'Açık mod'}[lang]
+    direction = 'rtl' if lang == 'fa' else 'ltr'
+    return f"""<!doctype html>
+<html lang="{lang}" dir="{direction}">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>{title}</title>
+  <link rel="stylesheet" href="/assets/desktop-auth.css">
+</head>
+<body>
+  <main>
+    <header>
+      <img src="/servernet.svg" alt="ServerNet">
+      <label class="theme-choice"><input type="checkbox" id="light-mode"> {light_mode}</label>
+    </header>
+    <h1>{title}</h1>
+    {content}
+  </main>
+</body>
+</html>"""
 
 
 class DesktopLogin:

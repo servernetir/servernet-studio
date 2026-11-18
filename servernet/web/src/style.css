@@ -8,3 +8,85 @@
 @media(prefers-reduced-motion:reduce){*{scroll-behavior:auto!important;transition:none!important}}
 
 .google-button{display:flex;align-items:center;justify-content:center;width:100%;min-height:48px;border:1px solid #dce4ed;border-radius:12px;background:#fff;color:#202124;margin-top:12px;font-size:13px;font-weight:500}.google-button:hover{background:#f4f7fb;border-color:#aabbcf}
+
+.login-page, .loading {
+  --sign-in-bg: #f8fafd;
+  --sign-in-glow: #dfeeff;
+  --sign-in-card: #fff;
+  --sign-in-quiet: #eef5ff;
+  --sign-in-text: #172339;
+  --sign-in-muted: #4e6380;
+  --sign-in-accent: #245e9b;
+  --sign-in-border: #ccd9eb;
+  color: var(--sign-in-text);
+  color-scheme: light;
+  background: radial-gradient(ellipse at 24% 52%, var(--sign-in-glow), transparent 58%), var(--sign-in-bg);
+}
+html[data-sign-in-theme=dark] :is(.login-page, .loading) {
+  --sign-in-bg: #0b1324;
+  --sign-in-glow: #162848;
+  --sign-in-card: #131f34;
+  --sign-in-quiet: #1c304e;
+  --sign-in-text: #eef4ff;
+  --sign-in-muted: #afbed5;
+  --sign-in-accent: #96cefa;
+  --sign-in-border: #435675;
+  color-scheme: dark;
+}
+.login-settings {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+.login-page .language, .login-page .theme-toggle {
+  min-height: 40px;
+  padding: 8px 12px;
+  border: 1px solid var(--sign-in-border);
+  border-radius: 9px;
+  background: var(--sign-in-card);
+  color: var(--sign-in-text);
+  font-size: 12px;
+  max-width: none;
+}
+.theme-toggle {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 7px;
+}
+.login-page .theme-toggle:hover, .login-page .google-button:hover {
+  background: var(--sign-in-quiet);
+}
+.login-page .brand small, .login-copy > p, .login-points, .login-card > p, .login-page footer {
+  color: var(--sign-in-muted);
+}
+.login-copy .eyebrow, .login-points svg, .login-card .register {
+  color: var(--sign-in-accent);
+}
+.login-page .login-card {
+  background: var(--sign-in-card);
+  border-color: var(--sign-in-border);
+}
+.login-card h2 { color: var(--sign-in-text); }
+.login-card .logo-orbit {
+  background: var(--sign-in-quiet);
+  border-color: var(--sign-in-border);
+}
+.login-card .google-button {
+  background: var(--sign-in-card);
+  border-color: var(--sign-in-border);
+  color: var(--sign-in-text);
+}
+.login-card .login-button { background: #1e65c7; }
+.login-card .login-button:hover { background: #1b56aa; }
+.login-card .register:hover { text-decoration: underline; }
+html[data-sign-in-theme=dark] .login-card .notice {
+  background: #302616;
+  border-color: #725a30;
+  color: #ffd990;
+}
+@media (max-width: 460px) {
+  .login-page nav { flex-wrap: wrap; gap: 16px; }
+  .login-settings { margin-inline-start: auto; }
+}

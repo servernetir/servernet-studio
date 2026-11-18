@@ -259,9 +259,24 @@ def create_app(settings: Settings, upstream: httpx.AsyncClient | None = None):
         if length > 32000:
             return JSONResponse({'detail': 'Request is too large.'}, 413)
         response = await call_next(request)
-        response.headers.update({'Cache-Control': 'no-store', 'Referrer-Policy': 'no-referrer',
-            'X-Content-Type-Options': 'nosniff', 'X-Frame-Options': 'DENY',
-            'Content-Security-Policy': "default-src 'self'; script-src 'self'; style-src 'self'; font-src 'self'; img-src 'self' data:; connect-src 'self'; frame-ancestors 'none'; base-uri 'none'; form-action 'self'"})
+        referrer_policy = 'no-referrer'
+        form_targets = "'self'"
+        if request.method == 'GET' and request.url.path == '/auth/desktop' and response.status_code == 200:
+            # A top-level form POST from a no-referrer page has an opaque Origin.
+            # Keep the request ID on Studio and allow the reviewed login redirects.
+            referrer_policy = 'same-origin'
+            form_targets += f' {settings.console} https://accounts.google.com'
+        response.headers.update({
+            'Cache-Control': 'no-store',
+            'Referrer-Policy': referrer_policy,
+            'X-Content-Type-Options': 'nosniff',
+            'X-Frame-Options': 'DENY',
+            'Content-Security-Policy': (
+                "default-src 'self'; script-src 'self'; style-src 'self'; font-src 'self'; "
+                "img-src 'self' data:; connect-src 'self'; frame-ancestors 'none'; base-uri 'none'; "
+                f"form-action {form_targets}"
+            ),
+        })
         return response
 
     def authenticated(request, mutate=False):

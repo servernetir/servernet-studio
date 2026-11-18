@@ -73,6 +73,7 @@ def test_desktop_approval_requires_matching_code_csrf_and_origin(setup):
     body = form(setup, data)
     browser = setup[1]
     assert browser.post('/auth/desktop', data=body).status_code == 403
+    assert browser.post('/auth/desktop', data=body, headers={'Origin': 'null'}).status_code == 403
     assert browser.post('/auth/desktop', data=body, headers={'Origin': 'https://attacker.test'}).status_code == 403
     assert approve(setup, data, body | {'csrf': 'wrong'}).status_code == 403
     for _ in range(5):
@@ -80,6 +81,22 @@ def test_desktop_approval_requires_matching_code_csrf_and_origin(setup):
     assert approve(setup, data, body).status_code == 409
     assert poll(setup, data).status_code == 409
     assert not setup[2]
+
+
+def test_approval_page_allows_the_browser_to_send_its_origin_and_follow_login(setup):
+    browser = setup[1]
+    response = browser.get(transaction(setup)['browser_url'])
+    assert response.status_code == 200
+    assert response.headers['referrer-policy'] == 'same-origin'
+    assert response.headers['cache-control'] == 'no-store'
+    assert response.headers['content-security-policy'].split('; ')[-1] == (
+        "form-action 'self' https://console.servernet.cloud https://accounts.google.com"
+    )
+
+    redirect = approve(setup, transaction(setup))
+    assert redirect.status_code == 302
+    assert redirect.headers['referrer-policy'] == 'no-referrer'
+    assert redirect.headers['content-security-policy'].split('; ')[-1] == "form-action 'self'"
 
 
 def test_desktop_approval_is_one_time_and_no_claim_before_callback(setup):
