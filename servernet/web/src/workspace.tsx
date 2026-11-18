@@ -2,11 +2,12 @@
 import {useState, type ReactNode} from 'react';
 import {
   ArrowUpRight, AudioLines, Boxes, Clapperboard, Download, Images, KeyRound, LibraryBig,
-  LogOut, MessageSquare, Plug, Plus, RefreshCw, Search, Wallet, X,
+  Link2, LogOut, MessageSquare, Plug, Plus, RefreshCw, Search, Wallet, X,
 } from 'lucide-react';
 import {copy, workspaceCopy, type Locale} from './copy';
 import {priceText, pricingUnit, supportsStudio, type Model} from './catalog';
 import {inferenceCopy} from './inference-copy';
+import {connectorCopy} from './connector-copy';
 
 export type Chat = {id: string; title: string};
 export type Account = {
@@ -15,10 +16,11 @@ export type Account = {
   ai: {spent_month: number; prompt_tokens_month: number; completion_tokens_month: number};
   display?: {eur_rate_irt: number | null; native: boolean};
 };
-export type View = 'chat' | 'models' | 'library' | 'image' | 'video' | 'audio' | 'tools';
+export type View = 'chat' | 'models' | 'library' | 'image' | 'video' | 'audio' | 'tools' | 'connectors';
 
 const viewIcons = {
-  chat: MessageSquare, models: Boxes, library: LibraryBig, image: Images, video: Clapperboard, audio: AudioLines, tools: Plug,
+  chat: MessageSquare, models: Boxes, library: LibraryBig, image: Images, video: Clapperboard, audio: AudioLines,
+  tools: Plug, connectors: Link2,
 };
 
 export function viewFromHash(): View {
@@ -67,55 +69,58 @@ export function WorkspaceSidebar(props: SidebarProps) {
   }
 
   return <aside id="studio-sidebar" className={`sidebar${props.open ? ' is-open' : ''}${props.collapsed ? ' is-collapsed' : ''}`}>
-    <div className="sidebar-brand">
-      {props.brand}
-      <button type="button" className="sidebar-close icon-button" onClick={props.close} aria-label={t.close}><X size={18}/></button>
-    </div>
-    <button type="button" className="new-chat" onClick={props.fresh} disabled={busy}><Plus size={18}/>{t.new}</button>
-    <div className="sidebar-scroll">
-      <nav className="workspace-nav" aria-label={w.navigation}>
-        <div className="nav-group">
-          {navLink('chat', w.chat)}
-          {navLink('models', w.catalog)}
-          {navLink('library', w.history)}
-        </div>
-        <div className="nav-group">
-          <h2 className="nav-label">{w.media}</h2>
-          {navLink('image', w.image)}
-          {navLink('video', w.video)}
-          {navLink('audio', w.audio)}
-        </div>
-        <a className="nav-link api-link" href={consoleUrl('account/ai')} target="_blank" rel="noopener noreferrer">
-          <KeyRound size={17} aria-hidden="true"/><span>{w.api}</span><ArrowUpRight size={13} aria-hidden="true"/>
-        </a>
-        {navLink('tools', f.tools)}
-      </nav>
-      {chats.length > 0 && <section className="recent-chats" aria-label={w.recent}>
-        <h2 className="nav-label">{w.recent}</h2>
-        {chats.slice(0, 5).map(chat => <button type="button" key={chat.id} className="recent-chat" onClick={() => props.openChat(chat)}
-          aria-current={view === 'chat' && chat.id === active ? 'true' : undefined} disabled={busy}>
-          <MessageSquare size={14} aria-hidden="true"/><span dir="auto">{chatTitle(chat, locale)}</span>
-        </button>)}
-      </section>}
-    </div>
-    <div className="sidebar-footer">
-      <div className="wallet-card">
-        <div className="wallet-label">
-          <Wallet size={15} aria-hidden="true"/>{t.wallet}
-          <button type="button" className="icon-button" onClick={props.refreshBalance} aria-label={t.retryAccount}><RefreshCw size={13}/></button>
-        </div>
-        <div className="wallet-total">
-          <strong aria-label={t.available}>{account ? priceText(account.wallet.available, locale, rate, true) ?? '—' : '—'}</strong>
-          <a href={consoleUrl('account/topup')} target="_blank" rel="noopener noreferrer" aria-label={t.topup} title={t.topup}><Plus size={17}/></a>
-        </div>
-        {Boolean(account?.wallet.reserved) && <small>{t.held} · {priceText(account!.wallet.reserved, locale, rate) ?? '—'}</small>}
+    <div className="sidebar-frame">
+      <div className="sidebar-brand">
+        {props.brand}
+        <button type="button" className="sidebar-close icon-button" onClick={props.close} aria-label={t.close}><X size={18}/></button>
       </div>
-      <div className="profile">
-        <div className="avatar" aria-hidden="true">{account?.customer.name.charAt(0)}</div>
-        <span dir="auto">{account?.customer.name}</span>
-        <button type="button" className="icon-button" onClick={props.logout} disabled={busy} aria-label={t.logout} title={t.logout}><LogOut size={17}/></button>
+      <button type="button" className="new-chat" onClick={props.fresh} disabled={busy}><Plus size={18}/>{t.new}</button>
+      <div className="sidebar-scroll">
+        <nav className="workspace-nav" aria-label={w.navigation}>
+          <div className="nav-group">
+            {navLink('chat', w.chat)}
+            {navLink('models', w.catalog)}
+            {navLink('library', w.history)}
+          </div>
+          <div className="nav-group">
+            <h2 className="nav-label">{w.media}</h2>
+            {navLink('image', w.image)}
+            {navLink('video', w.video)}
+            {navLink('audio', w.audio)}
+          </div>
+          <a className="nav-link api-link" href={consoleUrl('account/ai')} target="_blank" rel="noopener noreferrer">
+            <KeyRound size={17} aria-hidden="true"/><span>{w.api}</span><ArrowUpRight size={13} aria-hidden="true"/>
+          </a>
+          {navLink('connectors', connectorCopy[locale].heading)}
+          {navLink('tools', f.tools)}
+        </nav>
+        {chats.length > 0 && <section className="recent-chats" aria-label={w.recent}>
+          <h2 className="nav-label">{w.recent}</h2>
+          {chats.slice(0, 5).map(chat => <button type="button" key={chat.id} className="recent-chat" onClick={() => props.openChat(chat)}
+            aria-current={view === 'chat' && chat.id === active ? 'true' : undefined} disabled={busy}>
+            <MessageSquare size={14} aria-hidden="true"/><span dir="auto">{chatTitle(chat, locale)}</span>
+          </button>)}
+        </section>}
       </div>
-      <a className="legal-link" href="/legal">{t.legal}</a>
+      <div className="sidebar-footer">
+        <div className="wallet-card">
+          <div className="wallet-label">
+            <Wallet size={15} aria-hidden="true"/>{t.wallet}
+            <button type="button" className="icon-button" onClick={props.refreshBalance} aria-label={t.retryAccount}><RefreshCw size={13}/></button>
+          </div>
+          <div className="wallet-total">
+            <strong aria-label={t.available}>{account ? priceText(account.wallet.available, locale, rate, true) ?? '—' : '—'}</strong>
+            <a href={consoleUrl('account/topup')} target="_blank" rel="noopener noreferrer" aria-label={t.topup} title={t.topup}><Plus size={17}/></a>
+          </div>
+          {Boolean(account?.wallet.reserved) && <small>{t.held} · {priceText(account!.wallet.reserved, locale, rate) ?? '—'}</small>}
+        </div>
+        <div className="profile">
+          <div className="avatar" aria-hidden="true">{account?.customer.name.charAt(0)}</div>
+          <span dir="auto">{account?.customer.name}</span>
+          <button type="button" className="icon-button" onClick={props.logout} disabled={busy} aria-label={t.logout} title={t.logout}><LogOut size={17}/></button>
+        </div>
+        <a className="legal-link" href="/legal">{t.legal}</a>
+      </div>
     </div>
   </aside>;
 }

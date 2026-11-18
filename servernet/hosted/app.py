@@ -29,6 +29,7 @@ from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
 
 from servernet.hosted.config import runtime_environment
+from servernet.hosted.connectors import install_connectors
 from servernet.hosted.media import MAX_REQUEST, MEDIA_HOSTS, MediaStore, install_media, json_response
 
 # Registration includes the console's existing verification steps. This is only
@@ -52,6 +53,8 @@ class Settings:
     fonts: Path = Path('/run/servernet/fonts')
     assets: Path = Path(__file__).parents[1] / 'web' / 'dist'
     testing: bool = False
+    gmail_client_id: str | None = None
+    gmail_client_secret: str | None = None
 
     def __post_init__(self):
         for value in (self.origin, self.console, self.gateway, self.source_url):
@@ -63,6 +66,8 @@ class Settings:
             raise ValueError('Studio origin must not have a path or trailing slash.')
         if len(self.client_secret) < 32:
             raise ValueError('A private Studio client secret of at least 32 characters is required.')
+        if bool(self.gmail_client_id) != bool(self.gmail_client_secret):
+            raise ValueError('Configure both Gmail OAuth client fields or leave both unset.')
         Fernet(self.encryption_key.encode())
 
     @property
@@ -248,6 +253,7 @@ def event(name, data):
 
 def create_app(settings: Settings, upstream: httpx.AsyncClient | None = None):
     from .desktop import DesktopLogin, TEXT, page
+    from .gmail import install_gmail
     store = Store(settings)
     desktop = DesktopLogin(store, settings)
     media = MediaStore(store)
@@ -303,6 +309,8 @@ def create_app(settings: Settings, upstream: httpx.AsyncClient | None = None):
         return {'Authorization': 'Bearer ' + store.decrypt(row['token']), 'Accept': 'application/json'}
 
     install_media(app, settings, store, media, client, authenticated, headers)
+    vault = install_connectors(app, store, authenticated)
+    install_gmail(app, settings, store, vault, client, authenticated)
 
     @app.get('/auth/start')
     async def start(lang: str = 'fa', method: str = 'account'):
@@ -559,4 +567,6 @@ def configured_app():
         origin=environment['SERVERNET_STUDIO_ORIGIN'], client_secret=environment['SERVERNET_STUDIO_CLIENT_SECRET'],
         encryption_key=environment['SERVERNET_STUDIO_ENCRYPTION_KEY'], database=Path(environment.get('SERVERNET_STUDIO_DB', '/data/studio.db')),
         source_url=environment['SERVERNET_STUDIO_SOURCE_URL'], fonts=font_dir,
+        gmail_client_id=environment.get('SERVERNET_STUDIO_GMAIL_CLIENT_ID'),
+        gmail_client_secret=environment.get('SERVERNET_STUDIO_GMAIL_CLIENT_SECRET'),
     ))

@@ -14,11 +14,17 @@ The observed ServerNet account has Python 3.12.16, Node and Passenger, without D
 
 If Application Manager cannot supply environment variables, copy the **template** `servernet/config.example.json` into the private application's `servernet/runtime/config.json`, outside every document root. This directory is ignored by Git. The template contains placeholders, never usable credentials. Create the runtime directory with mode 0700 and the actual file with mode 0600 (0400 is also accepted), owned by the same user that runs Passenger. The file and its containing path must not use symlinks; hard-linked files are rejected. Protect its backups in the same way.
 
-The loader accepts only the six existing settings shown in the template. It cannot change Gateway/console endpoints or enable testing mode. Reads are limited to 16 KiB. Malformed JSON, duplicate/unknown fields, empty or invalid values, shared permissions and a different POSIX owner stop startup without including values or paths in the error.
+The loader accepts the six settings in the template and the optional Gmail settings below. It cannot change Gateway/console endpoints or enable testing mode. Reads are limited to 16 KiB. Malformed JSON, duplicate/unknown fields, empty or invalid values, shared permissions and a different POSIX owner stop startup without including values or paths in the error.
 
 An environment value overrides the matching file value. Invalid file fields are rejected before overrides, and an empty environment override is an error. If the default file is absent, environment-only deployments continue to work. To use another **absolute, private** path, set `SERVERNET_STUDIO_CONFIG`; a missing explicitly configured file is an error, even if environment settings exist. No secrets are copied into `os.environ`. Ordinary `.env` files are not automatically loaded by the Python entry point; Docker Compose's `env_file` remains supported.
 
 Set `SERVERNET_STUDIO_FONTS` to the existing site's three IRANSans WOFF2 files, `SERVERNET_STUDIO_DB` to persistent private storage and `SERVERNET_STUDIO_SOURCE_URL` to the exact deployed public commit. Keep the encryption key stable across application updates; replacing it would prevent existing sessions/flows from decrypting. This loader never creates or rotates credentials. Restart only this Passenger application after a reviewed configuration change.
+
+### Optional Gmail connection
+
+Gmail requires its own Google Web application OAuth client and an enabled Gmail API in the same Google Cloud project. Register `https://studio.servernet.cloud/auth/connectors/gmail/callback` as an authorized redirect URI and configure the consent screen for `https://www.googleapis.com/auth/gmail.metadata`. For production, complete Google's [verification requirements for restricted Gmail scopes](https://developers.google.com/workspace/gmail/api/auth/scopes), including security assessment where required.
+
+Set `SERVERNET_STUDIO_GMAIL_CLIENT_ID` and `SERVERNET_STUDIO_GMAIL_CLIENT_SECRET` together in the private configuration or environment. Leave both unset until the provider setup is ready. Connect and disconnect using an authorized test account before enabling for customers. Verify Google consent, unread inbox count and revocation across two distinct Studio accounts. The connector requests only the inbox unread count, stores the encrypted refresh token and performs no background mailbox requests.
 
 ## Live status
 

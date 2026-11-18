@@ -23,8 +23,10 @@ export function external(value) {
   const u = url(value);
   if (!u || u.protocol !== 'https:' || u.port) return false;
   if (u.origin === 'https://console.servernet.cloud') return /^\/(?:en\/|tr\/)?(?:account(?:\/|$)|login(?:\/|$)|register(?:\/|$))/.test(u.pathname);
+  if (u.origin === 'https://myaccount.google.com') return u.pathname === '/connections' && !u.search && !u.hash;
   return u.origin === 'https://servernet.cloud' && /^\/(?:en\/|tr\/)?(?:studio\/download|ai\/(?:models|docs))\/?$/.test(u.pathname)
-    || u.origin === ORIGIN && (u.pathname === '/legal' || u.pathname === '/studio-chrome-extension.zip');
+    || u.origin === ORIGIN && (u.pathname === '/legal' || u.pathname === '/studio-chrome-extension.zip'
+      || (u.pathname === '/' && !u.search && u.hash === '#connectors'));
 }
 export function conversationExport(value) {
   const u = url(value);

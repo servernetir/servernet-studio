@@ -21,6 +21,12 @@ test('external windows are confined to the reviewed ServerNet destinations',()=>
   assert.equal(external('https://servernet.cloud/studio/download'),true);
   assert.equal(external('https://servernet.cloud/en/ai/models?type=video'),true);
   assert.equal(external('https://servernet.cloud/tr/ai/docs'),true);
+  assert.equal(external(ORIGIN+'/#connectors'),true);
+  assert.equal(external(ORIGIN+'/?next=https://evil.test#connectors'),false);
+  assert.equal(external(ORIGIN+'/auth/connectors/gmail/callback#connectors'),false);
+  assert.equal(external('https://accounts.google.com/o/oauth2/v2/auth'),false);
+  assert.equal(external('https://myaccount.google.com/connections'),true);
+  assert.equal(external('https://myaccount.google.com/connections?next=https://evil.test'),false);
   for(const value of ['https://evil.test','https://console.servernet.cloud:444/account','https://console.servernet.cloud/admin','https://servernet.cloud/downloads/evil.exe','https://console.servernet.cloud@evil.test/account'])assert.equal(external(value),false);
 });
 test('only a fixed Studio conversation export can produce a text filename', () => {
