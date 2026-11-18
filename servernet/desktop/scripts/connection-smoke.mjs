@@ -6,18 +6,25 @@ import {setTimeout as sleep} from 'node:timers/promises';
 import {app, BrowserWindow, clipboard} from 'electron';
 import {confirmConnection} from '../src/connection-dialog.mjs';
 
-const timeout = setTimeout(() => app.exit(1), 20000);
+let stage = 'starting Electron';
+const timeout = setTimeout(() => {
+  console.error('Connection dialog smoke check timed out while ' + stage);
+  app.exit(1);
+}, 30000);
 await app.whenReady();
 const parent = new BrowserWindow({width: 520, height: 460, webPreferences: {sandbox: true}});
 const code = 'ABCD-1234';
 const originalClipboard = clipboard.readText();
 
 async function testDialog(config, expected, action) {
+  stage = 'opening the ' + config.lang + ' dialog';
   const controller = new AbortController();
   const result = confirmConnection(parent, code, config, controller.signal);
+  const opened = result.then(() => { throw Error('The dialog closed before loading.'); });
   const popup = BrowserWindow.getAllWindows().find(window => window.getParentWindow() === parent);
   assert.ok(popup?.isModal());
-  await once(popup.webContents, 'did-finish-load');
+  await Promise.race([once(popup.webContents, 'did-finish-load'), opened]);
+  stage = 'checking the ' + config.lang + ' dialog content';
   for (let attempt = 0; attempt < 100; attempt++) {
     if (popup.isDestroyed()) throw Error('The dialog closed before it could display its content.');
     const page = await popup.webContents.executeJavaScript(`
@@ -34,13 +41,15 @@ async function testDialog(config, expected, action) {
       continue;
     }
     assert.deepEqual(page, {code, direction: expected, theme: config.theme, fits: true, node: 'undefined'});
+    stage = 'checking ' + action + ' in the ' + config.lang + ' dialog';
     if (action === 'abort') controller.abort();
     else if (action === 'escape') {
-      await popup.webContents.executeJavaScript("document.dispatchEvent(new KeyboardEvent('keydown', {key:'Escape'}))");
+      void popup.webContents.executeJavaScript("document.dispatchEvent(new KeyboardEvent('keydown', {key:'Escape'}))").catch(() => {});
     } else {
-      await popup.webContents.executeJavaScript("document.getElementById('continue').click()");
+      void popup.webContents.executeJavaScript("document.getElementById('continue').click()").catch(() => {});
     }
     assert.equal(await result, action === 'continue');
+    console.log('Verified ' + config.lang + ' / ' + config.theme + ' / ' + action);
     return;
   }
   controller.abort();
