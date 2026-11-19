@@ -7,6 +7,11 @@ on:
     paths: ['servernet/desktop/**', '.github/workflows/servernet-desktop.yml']
   workflow_dispatch:
     inputs:
+      platform:
+        description: Build Windows independently, Mac independently, or both
+        type: choice
+        options: [windows, macos, all]
+        default: windows
       signed:
         description: Build signed release candidates after live acceptance
         type: boolean
@@ -16,6 +21,7 @@ permissions:
 jobs:
   contracts:
     runs-on: ubuntu-latest
+    timeout-minutes: 12
     steps:
       - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803
         with: {persist-credentials: false}
@@ -36,9 +42,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        include:
-          - {os: windows-2022, target: '--win --x64', name: windows-x64}
-          - {os: macos-15-intel, target: '--mac --arm64 --x64', name: macos}
+        include: ${{ fromJSON(inputs.platform == 'all' && '[{"os":"windows-2022","target":"--win --x64","name":"windows-x64"},{"os":"macos-15-intel","target":"--mac --arm64 --x64","name":"macos"}]' || inputs.platform == 'macos' && '[{"os":"macos-15-intel","target":"--mac --arm64 --x64","name":"macos"}]' || '[{"os":"windows-2022","target":"--win --x64","name":"windows-x64"}]') }}
     runs-on: ${{ matrix.os }}
     timeout-minutes: 30
     env:
@@ -103,6 +107,13 @@ jobs:
       - name: Launch packaged client on its native OS
         if: ${{ runner.os == 'Windows' }}
         run: node scripts/native-smoke.mjs
+      - name: Install, launch and uninstall the Windows installer
+        if: ${{ runner.os == 'Windows' }}
+        shell: pwsh
+        env:
+          SERVERNET_WINDOWS_PUBLISHER: ${{ vars.SERVERNET_WINDOWS_PUBLISHER }}
+          SERVERNET_SIGNED_BUILD: ${{ inputs.signed || false }}
+        run: ./scripts/windows-install-smoke.ps1
       - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9
         with:
           name: servernet-${{ matrix.name }}-${{ inputs.signed && 'signed-candidate' || 'UNSIGNED-TEST' }}
@@ -112,10 +123,12 @@ jobs:
             servernet/desktop/release/*.zip
             servernet/desktop/release/*.blockmap
             servernet/desktop/release/latest*.yml
+            servernet/desktop/release/windows-install-smoke.json
           if-no-files-found: error
           retention-days: 14
   native-mac:
     needs: packages
+    if: ${{ inputs.platform == 'macos' || inputs.platform == 'all' }}
     strategy:
       fail-fast: false
       matrix:

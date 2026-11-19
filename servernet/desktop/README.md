@@ -55,7 +55,13 @@ Set `SERVERNET_WINDOWS_PUBLISHER` to the certificate's actual publisher identity
 
 After signed builds, validate the Windows Authenticode identities and macOS code signatures/stapled tickets. The workflow performs these checks and produces candidates; it does not silently publish a release or change production. Place signed installers, update ZIPs, blockmaps and `latest*.yml` under the fixed HTTPS feed `https://servernet.cloud/downloads/studio/` as one coordinated release. Check for updates is user initiated; download and installation require the user's in-app action. Downgrades and prereleases are disabled. Do not change the feed or trust arbitrary renderer URLs.
 
-The website page is `/studio/download` with fa/en/tr variants. Its feature stays disabled until all three approved installer entries, exact file sizes and checksums are available. The private manifest is `storage/app/studio/release.json`; see the core contract in PR323. Match `SERVERNET_STUDIO_DOWNLOADS_DIRECTORY` to the actual public download directory, verify bytes during installation and keep the release manifest outside webroot. Publish matching source before distributing the AGPL client.
+The website page is `/studio/download` with fa/en/tr variants. The Windows-first core change allows an approved Windows-only manifest while the Mac cards remain in preparation. Every listed installer still requires its distribution signature, exact name, size and SHA-256; Mac entries additionally require notarization. The private manifest is `storage/app/studio/release.json`. Match `SERVERNET_STUDIO_DOWNLOADS_DIRECTORY` to the actual public download directory, verify bytes during installation and keep the release manifest outside webroot. Publish matching source before distributing the AGPL client.
+
+## Windows-first delivery
+
+Push and pull-request checks now build Windows only. For manual runs, select `platform: windows` (default), `macos`, or `all`. Mac runner capacity and Apple credentials do not block a Windows build; Windows live acceptance and signing requirements still apply. Native Mac checks run only when a Mac package was requested.
+
+The Windows job also runs `scripts/windows-install-smoke.ps1`: it silently installs the actual NSIS EXE into a unique disposable runner directory, checks the installed app/uninstaller, launches the installed executable for eight seconds, then runs its uninstaller and verifies removal of the installed executable. Signed runs additionally verify the installed executable signatures and publisher. Its `windows-install-smoke.json` records the actual installer SHA-256, source SHA and outcomes. This test does not authenticate or issue model requests, and it does not replace interactive login, font, logout or financial acceptance. It refuses to run outside disposable Windows GitHub runners.
 
 ## Current deployment status
 

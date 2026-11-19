@@ -44,6 +44,12 @@ Remaining prerequisites require authorized production access, an explicitly auth
 
 ## Production acceptance not established
 
+### Windows-first preparation — 2026-11-18
+
+Starting from Studio `89efe2a` and core `311acf8`, the desktop workflow now defaults to Windows-only packaging and offers explicit Windows/Mac/all manual targets. The actual NSIS EXE gains an isolated install/installed-startup/uninstall check with a digest/source receipt; native execution of this new check must be confirmed in CI. Core changes allow a signed Windows-only manifest while showing Mac preparation cards. Signing, source-matched live acceptance and private manifest approval remain required.
+
+Read-only HTTPS checks on 2026-11-18 returned 404 for Studio `/healthz` and the website `/studio/download`. The connected Chrome browser could not open cPanel on port 2083 (`ERR_CONNECTION_CLOSED`). No deployment, signing configuration, paid model call or public installer publication was performed. Git/CI preparation does not establish a usable public service.
+
 ### Native Mac coverage correction
 
 The previous startup script always selected `release/mac-arm64`, so it could not establish Intel startup. The revised workflow tests each already-built Mac ZIP on its matching standard native host, rejects host/package architecture mismatches and verifies the executable architecture before launch. It retains one combined Mac packaging job and its update metadata. Local validation for this change: 10 Node tests passed, startup scripts passed syntax checks, workflow YAML parsed and `git diff --check` passed. Native GitHub results for this change are pending; neither Mac launch nor interactive acceptance is claimed. Rollback is to revert this workflow/helper change; it does not alter production, billing, signatures or public flags.
