@@ -1,0 +1,33 @@
+name: ServerNet signing configuration readiness
+
+on:
+  push:
+    branches: [develop]
+    paths: ['.github/workflows/servernet-signing-readiness.yml']
+
+permissions: {}
+
+jobs:
+  readiness:
+    if: ${{ github.repository == 'servernetir/servernet-studio' && github.ref == 'refs/heads/develop' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Report presence of release prerequisites (no secret values)
+        shell: bash
+        env:
+          WINDOWS_CONFIGURED: ${{ secrets.SERVERNET_WIN_CSC_LINK != '' && secrets.SERVERNET_WIN_CSC_PASSWORD != '' && vars.SERVERNET_WINDOWS_PUBLISHER != '' }}
+          MAC_CONFIGURED: ${{ secrets.SERVERNET_MAC_CSC_LINK != '' && secrets.SERVERNET_MAC_CSC_PASSWORD != '' && secrets.SERVERNET_APPLE_ID != '' && secrets.SERVERNET_APPLE_APP_PASSWORD != '' && secrets.SERVERNET_APPLE_TEAM_ID != '' }}
+          ACCEPTANCE_CONFIGURED: ${{ vars.SERVERNET_DESKTOP_ACCEPTANCE_JSON != '' }}
+        run: |
+          status() {
+            if [[ "$2" == true ]]; then
+              printf '%s: configured\n' "$1"
+            else
+              printf '%s: missing\n' "$1"
+            fi
+          }
+          status 'Windows signing configuration' "$WINDOWS_CONFIGURED"
+          status 'macOS signing configuration' "$MAC_CONFIGURED"
+          status 'Acceptance record' "$ACCEPTANCE_CONFIGURED"
+          printf '%s\n' 'Presence only; certificates, eligibility, acceptance freshness, and signed bytes still require verification.'
