@@ -1,0 +1,32 @@
+name: Publish ServerNet Studio 0.2.3 unsigned preview
+
+on:
+  push:
+    branches: [develop]
+    paths:
+      - '.github/workflows/servernet-preview-0.2.3.yml'
+      - '.github/scripts/publish-servernet-preview-0.2.3.py'
+
+permissions: {}
+concurrency:
+  group: servernet-studio-preview-0.2.3-39f2dd7
+  cancel-in-progress: false
+
+jobs:
+  publish:
+    if: ${{ github.repository == 'servernetir/servernet-studio' && github.ref == 'refs/heads/develop' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 40
+    permissions:
+      actions: read
+      contents: write
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803
+        with:
+          persist-credentials: false
+          sparse-checkout: '.github/scripts/publish-servernet-preview-0.2.3.py'
+          sparse-checkout-cone-mode: false
+      - name: Verify and publish the pinned preview artifacts
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: python3 .github/scripts/publish-servernet-preview-0.2.3.py
