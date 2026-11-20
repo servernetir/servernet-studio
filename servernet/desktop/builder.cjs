@@ -10,7 +10,9 @@ module.exports = {
   mac: {category: 'public.app-category.productivity', minimumSystemVersion: '13.0.0',
     icon: 'build/icon.icns', hardenedRuntime: true, notarize: true,
     target: [{target:'dmg', arch:['arm64','x64']}, {target:'zip', arch:['arm64','x64']}]},
-  dmg: {sign: true},
+  // DMGs are initial-install media. MacUpdater uses the ZIPs; the DMG is notarized
+  // after packaging and its stapled bytes must not leave a stale updater entry or blockmap.
+  dmg: {sign: true, writeUpdateInfo: false},
   win: {icon: 'build/icon.ico', target:[{target:'nsis',arch:['x64']}],
     signtoolOptions:{publisherName: process.env.SERVERNET_WINDOWS_PUBLISHER || 'ServerNet'}, verifyUpdateCodeSignature: true},
   nsis: {oneClick: false, perMachine: false, allowToChangeInstallationDirectory: true,
