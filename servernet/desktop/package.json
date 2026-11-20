@@ -13,11 +13,14 @@
     "pack": "electron-builder --config builder.cjs --dir --publish never",
     "build:test": "electron-builder --config builder.test.cjs --publish never",
     "build:release": "electron-builder --config builder.cjs --publish never",
-    "release:check": "node scripts/release-check.mjs"
+    "release:check": "node scripts/release-check.mjs",
+    "release:finalize": "node scripts/finalize-release.mjs"
   },
   "devDependencies": {
+    "@noble/hashes": "1.8.0",
     "electron": "45.3.3",
-    "electron-builder": "26.18.0"
+    "electron-builder": "26.18.0",
+    "js-yaml": "4.3.2"
   },
   "dependencies": {
     "electron-updater": "6.8.11"

@@ -40,7 +40,7 @@ jobs:
           - {os: windows-2022, target: '--win --x64', name: windows-x64}
           - {os: macos-15-intel, target: '--mac --arm64 --x64', name: macos}
     runs-on: ${{ matrix.os }}
-    timeout-minutes: 30
+    timeout-minutes: ${{ inputs.signed && matrix.name == 'macos' && 60 || 30 }}
     env:
       CSC_IDENTITY_AUTO_DISCOVERY: 'false'
     defaults:
@@ -100,6 +100,16 @@ jobs:
           }
         env:
           SERVERNET_WINDOWS_PUBLISHER: ${{ vars.SERVERNET_WINDOWS_PUBLISHER }}
+      - name: Notarize and verify final Mac disk images and updater bytes
+        if: ${{ inputs.signed && runner.os == 'macOS' }}
+        env:
+          APPLE_ID: ${{ secrets.SERVERNET_APPLE_ID }}
+          APPLE_APP_SPECIFIC_PASSWORD: ${{ secrets.SERVERNET_APPLE_APP_PASSWORD }}
+          APPLE_TEAM_ID: ${{ secrets.SERVERNET_APPLE_TEAM_ID }}
+        run: npm run release:finalize
+      - name: Verify final Windows updater bytes
+        if: ${{ inputs.signed && runner.os == 'Windows' }}
+        run: npm run release:finalize
       - name: Launch packaged client on its native OS
         if: ${{ runner.os == 'Windows' }}
         run: node scripts/native-smoke.mjs
@@ -112,6 +122,7 @@ jobs:
             servernet/desktop/release/*.zip
             servernet/desktop/release/*.blockmap
             servernet/desktop/release/latest*.yml
+            servernet/desktop/release/SHA256SUMS-*.txt
           if-no-files-found: error
           retention-days: 14
   native-mac:
