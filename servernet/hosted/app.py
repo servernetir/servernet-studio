@@ -559,6 +559,13 @@ def create_app(settings: Settings, upstream: httpx.AsyncClient | None = None):
         from html import escape
         return '<!doctype html><html><head><meta charset="utf-8"><title>ServerNet Studio — Legal</title></head><body><h1>ServerNet Studio</h1><p>Copyright 2026 ServerNet contributors. No warranty.</p><p>Includes components of Unsloth Studio, copyright Unsloth AI Inc. and contributors, licensed under AGPL-3.0-only. Original notices and licenses are retained in the corresponding source.</p><p><a href="' + escape(settings.source_url, quote=True) + '">Corresponding source and license notices</a></p></body></html>'
 
+    @app.get('/manifest.webmanifest', include_in_schema=False)
+    async def web_manifest():
+        manifest = settings.assets / 'manifest.webmanifest'
+        if not manifest.is_file():
+            raise HTTPException(404, 'Web app manifest not found.')
+        return FileResponse(manifest, media_type='application/manifest+json')
+
     if settings.assets.is_dir():
         app.mount('/', StaticFiles(directory=settings.assets, html=True), name='studio')
     return app

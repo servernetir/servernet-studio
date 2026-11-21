@@ -40,6 +40,7 @@ function chatTitle(chat: Chat, locale: Locale) {
 
 type SidebarProps = {
   brand: ReactNode;
+  installControl: ReactNode;
   locale: Locale;
   view: View;
   open: boolean;
@@ -96,6 +97,7 @@ export function WorkspaceSidebar(props: SidebarProps) {
             {navLink('audio', w.audio)}
           </div>
           {navLink('connectors', connectorCopy[locale].heading)}
+          {props.installControl}
         </nav>
         {chats.length > 0 && <section className="recent-chats" aria-label={w.recent}>
           <h2 className="nav-label">{w.recent}</h2>

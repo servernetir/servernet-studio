@@ -11,6 +11,7 @@ import {inferenceCopy} from './inference-copy';
 import {connectorCopy} from './connector-copy';
 import {ConnectedServices} from './connectors';
 import {projectCopy} from './project-copy';
+import {InstallButton, InstallDialog, useWebInstall} from './install';
 import {ChatContext, HistoryDialog, ProjectDialog, ProjectFolder, ProjectsHome, UsageDialog,
   projectIdFromHash, type Project, type ProjectChatState, type ProjectsState, type ProjectSettings} from './projects';
 import './style.css';
@@ -37,6 +38,7 @@ class ApiError extends Error {
 }
 
 export function App() {
+  const webInstall = useWebInstall();
   const [locale, setLocale] = useState<Locale>(() => {
     const saved = readPreference(LANGUAGE_KEY);
     return saved === 'fa' || saved === 'tr' ? saved : 'en';
@@ -539,9 +541,11 @@ export function App() {
           <a className="primary login-button" href={loginUrl('account')}>{t.login}<ArrowUpRight size={18}/></a>
           <a className="google-button" href={loginUrl('google')}>{t.google}</a>
           <a className="register" href={loginUrl('register')}>{t.register}</a>
+          <InstallButton locale={locale} state={webInstall}/>
         </section>
       </div>
       <footer><span>ServerNet Studio</span><a href="/legal">{t.legal}</a></footer>
+      <InstallDialog locale={locale} state={webInstall}/>
     </main>;
   }
 
@@ -553,6 +557,7 @@ export function App() {
     : view === 'models' ? w.catalog : view === 'library' ? w.history : w[view];
   return <div className="workspace">
     <WorkspaceSidebar brand={brand} locale={locale} view={view} open={mobile} collapsed={collapsed} chats={recentChats}
+      installControl={<InstallButton locale={locale} state={webInstall} sidebar/>}
       active={active} account={account} busy={busy} withinProject={Boolean(sidebarProjectId)} close={() => setMobile(false)}
       navigate={target => {if (target === 'chat' && chatProjectId) fresh(); else navigate(target);}}
       fresh={() => fresh(sidebarProjectId)} openChat={open} refreshBalance={refresh} logout={logout}/>
@@ -662,6 +667,7 @@ export function App() {
       save={saveHistory} close={() => setDialog(null)}/>}
     {dialog?.kind === 'usage' && account && <UsageDialog locale={locale} usage={account.ai} spend={amount(account.ai.spent_month)}
       dashboard={consoleUrl('account/ai')} close={() => setDialog(null)}/>}
+    <InstallDialog locale={locale} state={webInstall}/>
   </div>;
 }
 
