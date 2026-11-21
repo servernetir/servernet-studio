@@ -113,6 +113,21 @@ jobs:
       - name: Launch packaged client on its native OS
         if: ${{ runner.os == 'Windows' }}
         run: node scripts/native-smoke.mjs
+      - name: Install, launch and uninstall the Windows NSIS package
+        if: ${{ runner.os == 'Windows' }}
+        shell: pwsh
+        env:
+          SERVERNET_SIGNED_BUILD: ${{ inputs.signed || false }}
+          SERVERNET_WINDOWS_PUBLISHER: ${{ vars.SERVERNET_WINDOWS_PUBLISHER }}
+        run: ./scripts/windows-install-smoke.ps1
+      - name: Upload Windows installer smoke evidence
+        if: ${{ always() && runner.os == 'Windows' }}
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9
+        with:
+          name: servernet-windows-install-smoke
+          path: servernet/desktop/release/windows-install-smoke.json
+          if-no-files-found: warn
+          retention-days: 14
       - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9
         with:
           name: servernet-${{ matrix.name }}-${{ inputs.signed && 'signed-candidate' || 'UNSIGNED-TEST' }}
