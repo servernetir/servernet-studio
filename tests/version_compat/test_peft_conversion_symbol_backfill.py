@@ -806,6 +806,7 @@ def test_a_fused_moe_type_that_does_not_say_moe_still_refuses():
         "minimax_m2",
         "mellum",
         "qwen3_next",
+        "sarvam_mla",
         "solar_open",
         "flex_olmo",
         "deepseek_v2",
