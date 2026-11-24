@@ -351,6 +351,10 @@ html[dir=rtl] .desktop-toggle svg { transform: scaleX(-1); }
 .search-field:focus-within { outline: 1px solid var(--focus); outline-offset: 2px; }
 .search-field input { min-width: 0; width: 100%; min-height: 39px; padding: 6px 8px; border: 0; outline: none; background: transparent; color: var(--ink); font-size: 13px; }
 .search-field input::placeholder { color: var(--muted); }
+.catalog-controls { display: flex; flex-wrap: wrap; align-items: start; gap: 12px; margin-bottom: 20px; }
+.catalog-controls .search-field { flex: 1 1 240px; margin-bottom: 0; }
+.catalog-controls select { max-width: 100%; min-height: 41px; padding: 6px 10px; border: 1px solid var(--line); border-radius: 9px; background: var(--surface); color: var(--ink); font: inherit; font-size: 13px; }
+.catalog-controls select:focus-visible { outline: 1px solid var(--focus); outline-offset: 2px; }
 .model-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(min(100%, 205px), 1fr)); gap: 12px; }
 .model-card { background: var(--surface); border: 1px solid var(--line); border-radius: 12px; padding: 14px; display: flex; flex-direction: column; align-items: flex-start; }
 .model-card-top { display: flex; align-items: center; gap: 8px; margin-bottom: 10px; }

@@ -28,7 +28,10 @@ def setup(tmp_path):
                 'customer': {'id': 'customer-1', 'name': 'کاربر آزمایشی'}})
         assert request.headers['authorization'] == 'Bearer fake-servernet-key'
         if request.url.path.endswith('/models'):
-            return httpx.Response(200, json={'data': [{'id': 'sn-chat', 'category': 'chat'}, {'id':'video','category':'video'}, {'id':'unknown'}]})
+            return httpx.Response(200, json={'data': [{'id': 'sn-chat', 'category': 'chat'}, {'id':'video','category':'video'},
+                {'id':'vector','category':'embedding','endpoint':'/v1/embeddings',
+                 'pricing': {'unit':'tokens','quantity':1_000_000,'input_irt':120}, 'provider':'private'},
+                {'id':'rank','category':'rerank','endpoint':'/v1/rerank'}, {'id':'unknown'}]})
         if request.url.path.endswith('/studio/account'):
             return httpx.Response(200, json={'customer': {'id':'customer-1', 'name':'کاربر آزمایشی'},
                 'wallet': {'currency':'IRT', 'unit':'toman', 'balance': 900, 'reserved': 100, 'available':800},
@@ -182,6 +185,9 @@ def test_account_wallet_and_model_filter_are_server_owned(setup):
     assert browser.get('/api/models?catalog=true').json() == {'data': [
         {'id': 'sn-chat', 'context_length': None, 'category': 'chat'},
         {'id': 'video', 'context_length': None, 'category': 'video'},
+        {'id': 'vector', 'context_length': None, 'category': 'embedding', 'endpoint': '/v1/embeddings',
+         'pricing': {'unit': 'tokens', 'quantity': 1_000_000, 'input_irt': 120}},
+        {'id': 'rank', 'context_length': None, 'category': 'rerank', 'endpoint': '/v1/rerank'},
     ]}
     assert 'fake-servernet-key' not in browser.get('/api/session').text
 

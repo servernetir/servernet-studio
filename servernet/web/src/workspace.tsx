@@ -5,7 +5,7 @@ import {
   Link2, LogOut, MessageSquare, Plus, RefreshCw, Search, Wallet, X,
 } from 'lucide-react';
 import {copy, workspaceCopy, type Locale} from './copy';
-import {priceText, pricingUnit, supportsStudio, type Model} from './catalog';
+import {categories, filterModels, priceText, pricingUnit, supportsStudio, type Category, type Model} from './catalog';
 import {inferenceCopy} from './inference-copy';
 import {connectorCopy} from './connector-copy';
 import {projectCopy} from './project-copy';
@@ -149,12 +149,13 @@ export function ModelCatalog({locale, models, view, busy, choose, rate}: {
   rate: number | null;
 }) {
   const [search, setSearch] = useState('');
-  const query = search.trim().toLowerCase();
+  const [categoryFilter, setCategoryFilter] = useState<Category | 'all'>('all');
   const w = workspaceCopy[locale];
   const f = inferenceCopy[locale];
   const siteUrl = (path: string) => localizedUrl('https://servernet.cloud', locale, path);
   const catalog = models.filter(model => view === 'models' || model.category === view || (view === 'audio' && model.category === 'music'));
-  const matched = catalog.filter(model => `${model.label} ${model.id}`.toLowerCase().includes(query));
+  const matched = filterModels(catalog, search, view === 'models' ? categoryFilter : 'all');
+  const categoryLabel = (category: Category) => category === 'classification' ? f.classify : w[category];
   return <section className="tool-view catalog-view" aria-labelledby="catalog-title">
     <header className="tool-heading">
       <div>
@@ -165,12 +166,22 @@ export function ModelCatalog({locale, models, view, busy, choose, rate}: {
         {w.browseCatalog}<ArrowUpRight size={16}/>
       </a>
     </header>
-    <SearchField label={w.searchModels} value={search} onChange={setSearch}/>
+    <div className="catalog-controls">
+      <SearchField label={w.searchModels} value={search} onChange={setSearch}/>
+      {view === 'models' && <select aria-label={w.modelType} value={categoryFilter}
+        onChange={event => setCategoryFilter(event.target.value as Category | 'all')}>
+        <option value="all">{w.allTypes}</option>
+        {categories.filter(category => catalog.some(model => model.category === category))
+          .map(category => <option key={category} value={category}>{categoryLabel(category)}</option>)}
+      </select>}
+    </div>
     {matched.length === 0 ? <p className="empty-state" role="status">{catalog.length === 0 ? w.noCategoryModels : w.noResults}</p> :
       <div className="catalog-list">
         {matched.map(model => {
-          const category = model.category === 'classification' ? f.classify : w[model.category];
-          const Icon = viewIcons[model.category === 'music' ? 'audio' : model.category === 'classification' ? 'models' : model.category];
+          const category = categoryLabel(model.category);
+          const Icon = viewIcons[model.category === 'music' ? 'audio'
+            : ['classification', 'embedding', 'rerank'].includes(model.category) ? 'models'
+            : model.category as 'chat' | 'image' | 'video' | 'audio'];
           const pricing=model.pricing;
           return <article className="catalog-row" key={model.id}>
             <div className="catalog-model">
@@ -182,8 +193,9 @@ export function ModelCatalog({locale, models, view, busy, choose, rate}: {
             </div>
             <div className="catalog-price">
               {model.free ? <strong className="free-price">{f.free}</strong> :
-                pricing?.unit==='tokens' && typeof pricing.input_irt==='number' && typeof pricing.output_irt==='number' ? <>
-                  <span>{f.input} {priceText(pricing.input_irt, locale, rate) ?? '—'} · {f.output} {priceText(pricing.output_irt, locale, rate) ?? '—'}</span>
+                pricing?.unit==='tokens' && typeof pricing.input_irt==='number' ? <>
+                  <span>{f.input} {priceText(pricing.input_irt, locale, rate) ?? '—'}
+                    {typeof pricing.output_irt==='number' && <> · {f.output} {priceText(pricing.output_irt, locale, rate) ?? '—'}</>}</span>
                   <small>{f.perMillion}</small>
                 </> : typeof pricing?.amount_irt==='number' ? <>
                   <span>{priceText(pricing.amount_irt, locale, rate) ?? f.unavailable}</span>

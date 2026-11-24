@@ -1,8 +1,8 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 import type {Locale} from './copy';
 
-const categories = ['chat', 'image', 'video', 'audio', 'music', 'classification'] as const;
-type Category = (typeof categories)[number];
+export const categories = ['chat', 'embedding', 'rerank', 'image', 'video', 'audio', 'music', 'classification'] as const;
+export type Category = (typeof categories)[number];
 
 export type Field = {
   name: string;
@@ -71,7 +71,14 @@ export function readModels(payload: {data: Array<Partial<Model> & {name?: string
       category: entry.category ?? 'chat',
       context_length: entry.context_length ?? null,
       label: shortModelName(entry.id!, entry.name),
-    }));
+    }))
+    .sort((a, b) => a.label.localeCompare(b.label, 'en', {numeric: true, sensitivity: 'base'}) || a.id.localeCompare(b.id));
+}
+
+export function filterModels(models: Model[], query: string, category: Category | 'all' = 'all') {
+  const text = query.trim().toLowerCase();
+  return models.filter(model => (category === 'all' || model.category === category)
+    && `${model.label} ${model.id}`.toLowerCase().includes(text));
 }
 
 export function supportsStudio(model: Model) {
