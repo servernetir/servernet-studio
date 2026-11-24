@@ -402,7 +402,7 @@ def create_app(settings: Settings, upstream: httpx.AsyncClient | None = None):
     @app.get('/api/models')
     async def models(request: Request, catalog: bool = False):
         upstream = await gateway_get('/models?studio=1' if catalog else '/models', authenticated(request))
-        categories = ('chat', 'image', 'video', 'audio', 'music', 'classification') if catalog else ('chat',)
+        categories = ('chat', 'embedding', 'rerank', 'image', 'video', 'audio', 'music', 'classification') if catalog else ('chat',)
         data = []
         for model in upstream.get('data', []):
             if not isinstance(model, dict) or model.get('category') not in categories or not isinstance(model.get('id'), str):
